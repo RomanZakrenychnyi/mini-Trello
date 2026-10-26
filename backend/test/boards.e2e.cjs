@@ -6,10 +6,12 @@ const { join } = require('node:path');
 const { NestFactory } = require('@nestjs/core');
 const { PrismaClient } = require('@prisma/client');
 const { AppModule } = require('../dist/app.module');
+const { createApplication } = require('../dist/main');
 
 test('boards API validates input and persists boards across application restarts', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'mini-trello-test-'));
   const previousUrl = process.env.DATABASE_URL;
+  const previousNodeEnv = process.env.NODE_ENV;
   process.env.DATABASE_URL = `file:${join(directory, 'test.db').replaceAll('\\', '/')}`;
   let app;
   const prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
@@ -49,11 +51,28 @@ test('boards API validates input and persists boards across application restarts
     assert.equal(boards.length, 2);
     assert.ok(boards.some((item) => item.id === board.id));
     assert.deepEqual(await (await send('/health')).json(), { status: 'ok' });
+    await app.close();
+    app = undefined;
+    process.env.NODE_ENV = 'production';
+    app = await createApplication();
+    await app.listen(0, '127.0.0.1');
+    base = await app.getUrl();
+    assert.deepEqual(await (await send('/api/health')).json(), { status: 'ok' });
+    assert.deepEqual(await (await send(`/api/boards/${board.id}`)).json(), board);
+    assert.equal((await send('/api/missing')).status, 404);
+    for (const path of ['/', `/boards/${board.id}`]) {
+      const html = await send(path);
+      assert.equal(html.status, 200);
+      assert.match(html.headers.get('content-type'), /text\/html/);
+      assert.match(await html.text(), /<div id="app"><\/div>/);
+    }
   } finally {
     if (app) await app.close();
     await prisma.$disconnect();
     if (previousUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previousUrl;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
     await rm(directory, { recursive: true, force: true });
   }
 });
