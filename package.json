@@ -2,13 +2,22 @@
   "name": "mini-trello",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["frontend", "backend"],
-  "engines": { "node": ">=24.0.0" },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "dev": "concurrently -k -n frontend,backend \"npm run dev -w frontend\" \"npm run dev -w backend\"",
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
-    "start": "npm run start -w backend"
+    "start": "npm run start -w backend",
+    "db:setup": "npm run prisma:generate -w backend && npm run db:migrate -w backend",
+    "test": "npm test -w backend"
   },
-  "devDependencies": { "concurrently": "^9.2.1" }
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
 }
