@@ -14,6 +14,16 @@ export interface BoardList {
   updatedAt: string;
 }
 
+export interface Card {
+  id: string;
+  listId: string;
+  title: string;
+  description: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number) { super(message); }
 }

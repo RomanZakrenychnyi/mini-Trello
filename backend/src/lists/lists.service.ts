@@ -50,9 +50,15 @@ export class ListsService {
   }
 
   async remove(boardId: string, id: string) {
-    // Cards are not implemented yet, so all existing lists are empty.
-    const deleted = await this.prisma.boardList.deleteMany({ where: { id, boardId } });
-    if (!deleted.count) throw new NotFoundException('Список не найден на этой доске');
-    return { id };
+    try {
+      const deleted = await this.prisma.boardList.deleteMany({ where: { id, boardId } });
+      if (!deleted.count) throw new NotFoundException('Список не найден на этой доске');
+      return { id };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new ConflictException('Сначала удалите карточки из списка');
+      }
+      throw error;
+    }
   }
 }

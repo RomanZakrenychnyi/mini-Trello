@@ -8,7 +8,7 @@ const { PrismaClient } = require('@prisma/client');
 const { AppModule } = require('../dist/app.module');
 const { createApplication } = require('../dist/main');
 
-test('boards API validates input and persists boards across application restarts', async () => {
+test('boards, lists and cards validate input, isolate data and persist across restarts', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'mini-trello-test-'));
   const previousUrl = process.env.DATABASE_URL;
   const previousNodeEnv = process.env.NODE_ENV;
@@ -86,6 +86,49 @@ test('boards API validates input and persists boards across application restarts
     assert.deepEqual(remaining, [renamed]);
     const thirdList = await (await send(listPath, { name: 'Готово' })).json();
     assert.ok(thirdList.position > renamed.position);
+    const cardsPath = `${listPath}/${firstList.id}/cards`;
+    const wrongListPath = `${listPath}/${thirdList.id}/cards`;
+    const wrongBoardPath = `${otherPath}/${firstList.id}/cards`;
+    assert.deepEqual(await (await send(cardsPath)).json(), []);
+    assert.equal((await send(`${listPath}/missing/cards`)).status, 404);
+    assert.equal((await send(wrongBoardPath)).status, 404);
+    assert.equal((await send(wrongBoardPath, { title: 'Чужая карточка' })).status, 404);
+    for (const invalid of [{}, { title: '' }, { title: ' ' }, { title: null }, { title: 7 }, { title: 'a'.repeat(201) }, { title: 'Test', description: null }, { title: 'Test', description: 'a'.repeat(5001) }]) {
+      assert.equal((await send(cardsPath, invalid)).status, 400);
+    }
+    const cardResponse = await send(cardsPath, { title: '  Первая задача  ', description: 'Строка 1\nСтрока 2 <script>test</script>' });
+    assert.equal(cardResponse.status, 201);
+    const card = await cardResponse.json();
+    assert.equal(card.title, 'Первая задача');
+    assert.equal(card.description, 'Строка 1\nСтрока 2 <script>test</script>');
+    assert.equal(card.position, 0);
+    assert.equal(card.listId, firstList.id);
+    const secondCardResponse = await send(cardsPath, { title: 'a'.repeat(200), description: 'a'.repeat(5000) });
+    assert.equal(secondCardResponse.status, 201);
+    const secondCard = await secondCardResponse.json();
+    assert.equal(secondCard.position, 1);
+    assert.equal((await mutate(`${listPath}/${firstList.id}`, 'DELETE')).status, 409);
+    assert.deepEqual(await (await send(wrongListPath)).json(), []);
+    for (const foreignPath of [wrongListPath, wrongBoardPath]) {
+      assert.equal((await mutate(`${foreignPath}/${card.id}`, 'PATCH', { title: 'Изменить чужую' })).status, 404);
+      assert.equal((await mutate(`${foreignPath}/${card.id}`, 'DELETE')).status, 404);
+    }
+    for (const invalid of [{}, { title: ' ' }, { title: 'a'.repeat(201) }, { description: null }, { description: 'a'.repeat(5001) }]) {
+      assert.equal((await mutate(`${cardsPath}/${card.id}`, 'PATCH', invalid)).status, 400);
+    }
+    const cleared = await (await mutate(`${cardsPath}/${card.id}`, 'PATCH', { description: '' })).json();
+    assert.equal(cleared.title, card.title);
+    assert.equal(cleared.description, '');
+    const updatedCardResponse = await mutate(`${cardsPath}/${card.id}`, 'PATCH', { title: '  Уточнённая задача  ', description: 'Готово к работе\nВторая строка' });
+    assert.equal(updatedCardResponse.status, 200);
+    const updatedCard = await updatedCardResponse.json();
+    assert.equal(updatedCard.title, 'Уточнённая задача');
+    assert.equal(updatedCard.position, card.position);
+    assert.equal((await mutate(`${cardsPath}/${secondCard.id}`, 'DELETE')).status, 200);
+    assert.equal((await mutate(`${cardsPath}/${secondCard.id}`, 'DELETE')).status, 404);
+    const thirdCard = await (await send(cardsPath, { title: 'Следующая задача' })).json();
+    assert.equal(thirdCard.description, '');
+    assert.ok(thirdCard.position > updatedCard.position);
     await app.close();
     app = undefined;
     base = await start();
@@ -95,6 +138,14 @@ test('boards API validates input and persists boards across application restarts
     assert.ok(boards.some((item) => item.id === board.id));
     assert.deepEqual(await (await send(listPath)).json(), [renamed, thirdList]);
     assert.deepEqual(await (await send(otherPath)).json(), []);
+    assert.deepEqual(await (await send(cardsPath)).json(), [updatedCard, thirdCard]);
+    assert.equal((await mutate(`${listPath}/${firstList.id}`, 'DELETE')).status, 409);
+    const disposableList = await (await send(listPath, { name: 'Проверка удаления после карточки' })).json();
+    const disposablePath = `${listPath}/${disposableList.id}/cards`;
+    const disposableCard = await (await send(disposablePath, { title: 'Временная' })).json();
+    assert.equal((await mutate(`${listPath}/${disposableList.id}`, 'DELETE')).status, 409);
+    assert.equal((await mutate(`${disposablePath}/${disposableCard.id}`, 'DELETE')).status, 200);
+    assert.equal((await mutate(`${listPath}/${disposableList.id}`, 'DELETE')).status, 200);
     assert.deepEqual(await (await send('/health')).json(), { status: 'ok' });
     await app.close();
     app = undefined;
@@ -105,6 +156,7 @@ test('boards API validates input and persists boards across application restarts
     assert.deepEqual(await (await send('/api/health')).json(), { status: 'ok' });
     assert.deepEqual(await (await send(`/api/boards/${board.id}`)).json(), board);
     assert.deepEqual(await (await send(`/api${listPath}`)).json(), [renamed, thirdList]);
+    assert.deepEqual(await (await send(`/api${cardsPath}`)).json(), [updatedCard, thirdCard]);
     assert.equal((await send('/api/missing')).status, 404);
     for (const path of ['/', `/boards/${board.id}`]) {
       const html = await send(path);

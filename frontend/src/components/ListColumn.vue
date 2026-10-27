@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue';
 import { request, type BoardList } from '../api';
+import ListCards from './ListCards.vue';
 
 const props = defineProps<{ list: BoardList }>();
 const emit = defineEmits<{ updated: [list: BoardList]; removed: [id: string] }>();
@@ -9,6 +10,7 @@ const confirming = ref(false);
 const name = ref('');
 const busy = ref(false);
 const error = ref('');
+const cardCount = ref<number | null>(null);
 const input = ref<HTMLInputElement | null>(null);
 const renameButton = ref<HTMLButtonElement | null>(null);
 const path = `/boards/${encodeURIComponent(props.list.boardId)}/lists/${encodeURIComponent(props.list.id)}`;
@@ -67,14 +69,15 @@ async function remove() {
       <input :id="`rename-${list.id}`" ref="input" v-model="name" required maxlength="100" :disabled="busy" :aria-invalid="!!error" :aria-describedby="error ? `error-${list.id}` : undefined" @keydown.esc="!busy && cancel()" />
       <div class="list-actions"><button :disabled="busy">{{ busy ? 'Сохраняем…' : 'Сохранить' }}</button><button type="button" class="secondary" :disabled="busy" @click="cancel">Отмена</button></div>
     </form>
-    <template v-else>
-      <h3>{{ list.name }}</h3>
-      <p class="list-placeholder">Пока нет карточек</p>
+    <h3 v-else>{{ list.name }}</h3>
+    <ListCards :board-id="list.boardId" :list-id="list.id" @count="cardCount = $event" />
+    <template v-if="!editing">
       <div v-if="confirming" class="delete-confirm">
         <p>Удалить пустой список «{{ list.name }}»?</p>
         <div class="list-actions"><button class="danger" :disabled="busy" @click="remove">{{ busy ? 'Удаляем…' : 'Да, удалить' }}</button><button class="secondary" :disabled="busy" @click="cancel">Отмена</button></div>
       </div>
-      <div v-else class="list-actions"><button ref="renameButton" class="secondary" @click="edit">Переименовать</button><button class="danger-link" @click="confirming = true; error = ''">Удалить</button></div>
+      <div v-else class="list-actions"><button ref="renameButton" class="secondary" @click="edit">Переименовать</button><button class="danger-link" :disabled="cardCount !== 0" :title="cardCount ? 'Сначала удалите карточки из списка' : undefined" @click="confirming = true; error = ''">Удалить</button></div>
+      <p v-if="cardCount" class="list-hint">Чтобы удалить список, сначала удалите его карточки.</p>
     </template>
     <p v-if="error" :id="`error-${list.id}`" class="error" role="alert">{{ error }}</p>
   </article>
