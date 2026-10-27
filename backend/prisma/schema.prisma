@@ -12,4 +12,17 @@ model Board {
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  lists     BoardList[]
+}
+
+model BoardList {
+  id        String   @id @default(uuid())
+  boardId   String
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  name      String
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([boardId, position])
 }

@@ -31,4 +31,18 @@ button:disabled { opacity: .6; cursor: wait; }
 .board-card > span:last-child { font-size: 14px; color: #175cd3; }
 .board-icon { font-size: 26px; color: #175cd3; }
 .back-link { display: inline-block; margin-bottom: 24px; }
+.lists-row { display: flex; align-items: flex-start; gap: 20px; overflow-x: auto; padding: 4px 4px 20px; }
+.list-column, .list-create { flex: 0 0 300px; min-width: 0; padding: 20px; border: 1px solid #dce4ef; border-radius: 12px; background: #eaf0f8; }
+.list-create { background: white; }
+.list-column h3, .list-create h3 { margin: 0 0 20px; overflow-wrap: anywhere; }
+.list-column input, .list-create input { width: 100%; }
+.list-create > button { margin-top: 16px; }
+.list-placeholder { padding: 24px 0; color: #526580; font-size: 14px; }
+.list-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.list-actions button { font-size: 13px; padding: 10px 12px; }
+.danger { background: #b42318; }
+.danger:hover { background: #8f1c13; }
+.danger-link { color: #b42318; background: transparent; }
+.danger-link:hover { background: #fce6e4; }
+.delete-confirm p { overflow-wrap: anywhere; }
 @media (max-width: 600px) { .topbar span { display: none; } main { padding-top: 32px; } .form-row { flex-direction: column; } .create-panel { padding: 20px; } }

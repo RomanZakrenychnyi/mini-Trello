@@ -5,6 +5,15 @@ export interface Board {
   updatedAt: string;
 }
 
+export interface BoardList {
+  id: string;
+  boardId: string;
+  name: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number) { super(message); }
 }
