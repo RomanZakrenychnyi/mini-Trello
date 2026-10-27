@@ -1,5 +1,7 @@
 # mini-Trello
 
+[Открыть приложение →](https://mini-trello-rx64.onrender.com)
+
 Доски проектов на Vue 3 + TypeScript + Vite, Node.js + NestJS и SQLite + Prisma 6.
 
 ## Установка и запуск
