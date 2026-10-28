@@ -129,6 +129,32 @@ test('boards, lists and cards validate input, isolate data and persist across re
     const thirdCard = await (await send(cardsPath, { title: 'Следующая задача' })).json();
     assert.equal(thirdCard.description, '');
     assert.ok(thirdCard.position > updatedCard.position);
+    const movePath = `${cardsPath}/${thirdCard.id}/move`;
+    for (const invalid of [{}, { targetListId: firstList.id, position: -1 }, { targetListId: firstList.id, position: 0.5 }, { targetListId: firstList.id, position: '0' }, { targetListId: firstList.id, position: 99 }]) {
+      assert.equal((await mutate(movePath, 'PATCH', invalid)).status, 400);
+    }
+    const foreignList = await (await send(otherPath, { name: 'Чужая' })).json();
+    assert.equal((await mutate(movePath, 'PATCH', { targetListId: foreignList.id, position: 0 })).status, 404);
+    assert.equal((await mutate(`${wrongBoardPath}/${thirdCard.id}/move`, 'PATCH', { targetListId: firstList.id, position: 0 })).status, 404);
+    const movedUp = await mutate(movePath, 'PATCH', { targetListId: firstList.id, position: 0 });
+    assert.equal(movedUp.status, 200);
+    assert.deepEqual((await (await send(cardsPath)).json()).map(c => [c.id, c.position]), [[thirdCard.id, 0], [card.id, 1]]);
+    assert.equal((await mutate(movePath, 'PATCH', { targetListId: thirdList.id, position: 0 })).status, 200);
+    assert.deepEqual((await (await send(wrongListPath)).json()).map(c => [c.id, c.position]), [[thirdCard.id, 0]]);
+    assert.equal((await mutate(movePath, 'PATCH', { targetListId: firstList.id, position: 0 })).status, 404);
+    assert.equal((await mutate(`${wrongListPath}/${thirdCard.id}/move`, 'PATCH', { targetListId: firstList.id, position: 1 })).status, 200);
+    assert.equal((await mutate(movePath, 'PATCH', { targetListId: firstList.id, position: 1 })).status, 200);
+    const targetCard = await (await send(wrongListPath, { title: 'В целевом списке' })).json();
+    assert.equal((await mutate(`${cardsPath}/${card.id}/move`, 'PATCH', { targetListId: thirdList.id, position: 1 })).status, 200);
+    const targetCards = await (await send(wrongListPath)).json();
+    assert.deepEqual(targetCards.map(c => [c.id, c.position]), [[targetCard.id, 0], [card.id, 1]]);
+    assert.equal(targetCards[1].description, updatedCard.description);
+    assert.equal((await mutate(`${wrongListPath}/${card.id}/move`, 'PATCH', { targetListId: firstList.id, position: 0 })).status, 200);
+    assert.equal((await mutate(`${wrongListPath}/${targetCard.id}`, 'DELETE')).status, 200);
+    // Keep the expected records current after ordering updates their timestamps.
+    Object.assign(updatedCard, (await (await send(cardsPath)).json())[0]);
+    Object.assign(thirdCard, (await (await send(cardsPath)).json())[1]);
+    await mutate(`${otherPath}/${foreignList.id}`, 'DELETE');
     await app.close();
     app = undefined;
     base = await start();

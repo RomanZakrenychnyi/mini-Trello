@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { inject, onMounted, ref, watch } from 'vue';
+import { cardMovement } from '../cardMovement';
 import { request, type Card } from '../api';
 import CardForm from './CardForm.vue';
 import CardItem from './CardItem.vue';
@@ -8,18 +9,22 @@ const props = defineProps<{ boardId: string; listId: string }>();
 const emit = defineEmits<{ count: [count: number | null] }>();
 const cards = ref<Card[]>([]);
 const loading = ref(true);
+let loaded = false;
 const loadError = ref('');
 const createError = ref('');
 const adding = ref(false);
 const busy = ref(false);
+const movement = inject(cardMovement)!;
+watch(movement.revision, load);
+function active(index: number) { return movement.target.value?.listId === props.listId && movement.target.value.index === index; }
 const path = `/boards/${encodeURIComponent(props.boardId)}/lists/${encodeURIComponent(props.listId)}/cards`;
 async function load() {
-  loading.value = true;
+  loading.value = !loaded;
   loadError.value = '';
   emit('count', null);
   try { cards.value = await request<Card[]>(path); emit('count', cards.value.length); }
   catch (cause) { loadError.value = cause instanceof Error ? cause.message : 'Не удалось загрузить карточки'; }
-  finally { loading.value = false; }
+  finally { loading.value = false; loaded = true; }
 }
 async function create(data: { title: string; description: string }) {
   if (busy.value) return;
@@ -40,12 +45,18 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="list-cards" :aria-busy="loading">
+  <div class="list-cards" :aria-busy="loading" :data-drop-list="!loading && !loadError ? listId : undefined" :data-drop-index="cards.length">
     <p v-if="loading" role="status">Загружаем карточки…</p>
     <div v-else-if="loadError" role="alert"><p class="error">{{ loadError }}</p><button class="secondary" @click="load">Повторить</button></div>
     <template v-else>
       <p v-if="cards.length === 0" class="list-placeholder">Пока нет карточек</p>
-      <CardItem v-for="card in cards" :key="card.id" :card="card" :path="path" @updated="update" @removed="remove" />
+      <TransitionGroup name="card-order" tag="div">
+      <div v-for="(card, index) in cards" :key="card.id">
+        <div v-if="movement.dragged.value" class="card-drop" :class="{ 'drop-active': active(index) }" :data-drop-list="listId" :data-drop-index="index">Поместить сюда</div>
+        <CardItem :card="card" :path="path" :index="index" :total="cards.length" @updated="update" @removed="remove" />
+      </div>
+      </TransitionGroup>
+      <div v-if="movement.dragged.value" class="card-drop" :class="{ 'drop-active': active(cards.length) }" :data-drop-list="listId" :data-drop-index="cards.length">Поместить в конец</div>
       <CardForm v-if="adding" :id="`new-${listId}`" :busy="busy" submit-label="Создать карточку" @save="create" @cancel="adding = false; createError = ''" />
       <button v-else class="add-card secondary" @click="adding = true; createError = ''">+ Добавить карточку</button>
       <p v-if="createError" role="alert" class="error">{{ createError }}</p>

@@ -66,6 +66,45 @@ export class CardsService {
     }
   }
 
+  async move(boardId: string, listId: string, id: string, body: unknown) {
+    if (!body || typeof body !== 'object' || !('targetListId' in body) || typeof body.targetListId !== 'string' ||
+        !('position' in body) || typeof body.position !== 'number' || !Number.isSafeInteger(body.position) || body.position < 0) {
+      throw new BadRequestException('Укажите целевой список и целую позицию от 0');
+    }
+    const { targetListId, position } = body;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const card = await tx.card.findFirst({ where: { id, listId, list: { boardId } } });
+          if (!card) throw new NotFoundException('Карточка не найдена в этом списке');
+          if (!await tx.boardList.findFirst({ where: { id: targetListId, boardId } })) {
+            throw new NotFoundException('Целевой список не найден на этой доске');
+          }
+          const affected = await tx.card.findMany({ where: { listId: { in: [listId, targetListId] } }, orderBy: { position: 'asc' } });
+          const target = affected.filter((item) => item.listId === targetListId && item.id !== id);
+          if (position > target.length) throw new BadRequestException('Позиция выходит за границы списка');
+          target.splice(position, 0, card);
+          const source = listId === targetListId ? [] : affected.filter((item) => item.listId === listId && item.id !== id);
+          // Vacate all occupied positions before assigning the final order (unique listId + position).
+          const offset = Math.max(0, ...affected.map((item) => item.position)) + 1;
+          for (let index = 0; index < affected.length; index++) {
+            await tx.card.update({ where: { id: affected[index]!.id }, data: { position: offset + index } });
+          }
+          for (const [destination, items] of [[listId, source], [targetListId, target]] as const) {
+            for (let index = 0; index < items.length; index++) {
+              await tx.card.update({ where: { id: items[index]!.id }, data: { listId: destination, position: index } });
+            }
+          }
+          return tx.card.findUniqueOrThrow({ where: { id } });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2034'].includes(error.code)) continue;
+        throw error;
+      }
+    }
+    throw new ConflictException('Доска изменилась параллельно. Обновите её и повторите перемещение.');
+  }
+
   async remove(boardId: string, listId: string, id: string) {
     const deleted = await this.prisma.card.deleteMany({ where: { id, listId, list: { boardId } } });
     if (!deleted.count) throw new NotFoundException('Карточка не найдена в этом списке');
