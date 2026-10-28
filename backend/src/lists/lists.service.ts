@@ -51,11 +51,15 @@ export class ListsService {
 
   async remove(boardId: string, id: string) {
     try {
-      const deleted = await this.prisma.boardList.deleteMany({ where: { id, boardId } });
-      if (!deleted.count) throw new NotFoundException('Список не найден на этой доске');
+      const deleted = await this.prisma.boardList.deleteMany({ where: { id, boardId, cards: { none: {} } } });
+      if (!deleted.count) {
+        const existing = await this.prisma.boardList.findFirst({ where: { id, boardId }, select: { id: true } });
+        if (existing) throw new ConflictException('Сначала удалите карточки из списка');
+        throw new NotFoundException('Список не найден на этой доске');
+      }
       return { id };
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2003', 'P2014'].includes(error.code)) {
         throw new ConflictException('Сначала удалите карточки из списка');
       }
       throw error;
