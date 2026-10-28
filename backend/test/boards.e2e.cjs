@@ -173,6 +173,38 @@ test('boards, lists and cards validate input, isolate data and persist across re
     assert.equal((await mutate(`${disposablePath}/${disposableCard.id}`, 'DELETE')).status, 200);
     assert.equal((await mutate(`${listPath}/${disposableList.id}`, 'DELETE')).status, 200);
     assert.deepEqual(await (await send('/health')).json(), { status: 'ok' });
+    for (const invalid of [{}, { name: null }, { name: 7 }, { name: ' ' }, { name: 'a'.repeat(101) }]) {
+      assert.equal((await mutate(`/boards/${board.id}`, 'PATCH', invalid)).status, 400);
+    }
+    assert.equal((await mutate('/boards/missing', 'PATCH', { name: 'Название' })).status, 404);
+    assert.equal((await send('/boards/missing/deletion-preview')).status, 404);
+    assert.equal((await mutate('/boards/missing', 'DELETE')).status, 404);
+    const renameBoard = await mutate(`/boards/${board.id}`, 'PATCH', { name: '  Новый план  ' });
+    assert.equal(renameBoard.status, 200);
+    Object.assign(board, await renameBoard.json());
+    assert.equal(board.name, 'Новый план');
+    assert.equal((await (await send('/boards')).json()).find(item => item.id === board.id).name, 'Новый план');
+    assert.deepEqual(await (await send(`/boards/${board.id}/deletion-preview`)).json(), { lists: 2, cards: 2 });
+    const emptyBoard = await (await send('/boards', { name: 'Пустая для удаления' })).json();
+    assert.deepEqual(await (await send(`/boards/${emptyBoard.id}/deletion-preview`)).json(), { lists: 0, cards: 0 });
+    assert.equal((await mutate(`/boards/${emptyBoard.id}`, 'DELETE')).status, 200);
+    const doomed = await (await send('/boards', { name: 'Удаляемая с содержимым' })).json();
+    const doomedLists = [];
+    for (const name of ['Первая', 'Вторая']) {
+      const list = await (await send(`/boards/${doomed.id}/lists`, { name })).json();
+      doomedLists.push(list.id);
+      await send(`/boards/${doomed.id}/lists/${list.id}/cards`, { title: 'Вложенная карточка' });
+    }
+    assert.deepEqual(await (await send(`/boards/${doomed.id}/deletion-preview`)).json(), { lists: 2, cards: 2 });
+    const deleteBoard = await mutate(`/boards/${doomed.id}`, 'DELETE');
+    assert.equal(deleteBoard.status, 200);
+    assert.deepEqual(await deleteBoard.json(), { id: doomed.id });
+    assert.equal((await mutate(`/boards/${doomed.id}`, 'DELETE')).status, 404);
+    assert.equal((await send(`/boards/${doomed.id}`)).status, 404);
+    assert.equal(await prisma.boardList.count({ where: { boardId: doomed.id } }), 0);
+    assert.equal(await prisma.card.count({ where: { listId: { in: doomedLists } } }), 0);
+    assert.deepEqual(await (await send(cardsPath)).json(), [updatedCard, thirdCard]);
+    assert.deepEqual(await (await send(`/boards/${otherBoard.id}`)).json(), otherBoard);
     await app.close();
     app = undefined;
     process.env.NODE_ENV = 'production';
@@ -181,6 +213,7 @@ test('boards, lists and cards validate input, isolate data and persist across re
     base = await app.getUrl();
     assert.deepEqual(await (await send('/api/health')).json(), { status: 'ok' });
     assert.deepEqual(await (await send(`/api/boards/${board.id}`)).json(), board);
+    assert.equal((await send(`/api/boards/${doomed.id}`)).status, 404);
     assert.deepEqual(await (await send(`/api${listPath}`)).json(), [renamed, thirdList]);
     assert.deepEqual(await (await send(`/api${cardsPath}`)).json(), [updatedCard, thirdCard]);
     assert.equal((await send('/api/missing')).status, 404);

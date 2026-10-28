@@ -53,6 +53,10 @@ button:disabled { opacity: .6; cursor: wait; }
 .card-form textarea { width: 100%; resize: vertical; padding: 10px; border: 1px solid #aebed2; border-radius: 8px; font: inherit; }
 .add-card { width: 100%; text-align: left; margin-top: 12px; }
 .list-hint { font-size: 12px; color: #526580; line-height: 1.5; }
+.board-action-panel { margin-top: 20px; padding: 20px; border: 1px solid #dce4ef; border-radius: 12px; background: white; max-width: 640px; }
+.board-action-panel input { width: 100%; }
+.board-delete-panel { border-color: #e9aaa5; }
+.board-delete-panel h2 { overflow-wrap: anywhere; }
 .drag-handle { float: right; cursor: grab; padding: 4px 10px; border-radius: 6px; user-select: none; touch-action: none; }
 .card-drop { padding: 12px; border: 2px dashed #759ff0; border-radius: 8px; font-size: 13px; color: #425b80; }
 .drop-active { background: #cbdcff; border-color: #175cd3; }
