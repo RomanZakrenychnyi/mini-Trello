@@ -53,6 +53,8 @@ button:disabled { opacity: .6; cursor: wait; }
 .card-form textarea { width: 100%; resize: vertical; padding: 10px; border: 1px solid #aebed2; border-radius: 8px; font: inherit; }
 .add-card { width: 100%; text-align: left; margin-top: 12px; }
 .list-hint { font-size: 12px; color: #526580; line-height: 1.5; }
+.board-search { margin: 20px 0; padding: 20px; background: white; border: 1px solid #dce4ef; border-radius: 12px; }
+.board-search [role="status"] { color: #526580; margin-bottom: 0; }
 .board-action-panel { margin-top: 20px; padding: 20px; border: 1px solid #dce4ef; border-radius: 12px; background: white; max-width: 640px; }
 .board-action-panel input { width: 100%; }
 .board-delete-panel { border-color: #e9aaa5; }

@@ -7,6 +7,7 @@ export interface CardMovement {
   target: Ref<{ listId: string; index: number } | null>;
   preview: Ref<{ x: number; y: number; width: number; height: number; settling: boolean } | null>;
   moving: Ref<boolean>;
+  searchActive: Ref<boolean>;
   revision: Ref<number>;
   move(card: Card, targetListId: string, position: number): Promise<void>;
 }

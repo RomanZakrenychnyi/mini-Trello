@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch, watchEffect, onBeforeUnmount } from 'vue';
+import { boardSearch } from '../boardSearch';
 import { cardMovement } from '../cardMovement';
 import { request, type Card } from '../api';
 import CardForm from './CardForm.vue';
@@ -15,6 +16,14 @@ const createError = ref('');
 const adding = ref(false);
 const busy = ref(false);
 const movement = inject(cardMovement)!;
+const search = inject(boardSearch)!;
+const needle = computed(() => search.query.value.trim().toLocaleLowerCase());
+function matches(card: Card) {
+  return !needle.value || card.title.toLocaleLowerCase().includes(needle.value) || card.description.toLocaleLowerCase().includes(needle.value);
+}
+const matchedCount = computed(() => cards.value.filter(matches).length);
+watchEffect(() => search.report(props.listId, loading.value ? null : { count: loadError.value ? 0 : matchedCount.value, failed: !!loadError.value }));
+onBeforeUnmount(() => search.report(props.listId, null));
 watch(movement.revision, load);
 function active(index: number) { return movement.target.value?.listId === props.listId && movement.target.value.index === index; }
 const path = `/boards/${encodeURIComponent(props.boardId)}/lists/${encodeURIComponent(props.listId)}/cards`;
@@ -45,13 +54,14 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="list-cards" :aria-busy="loading" :data-drop-list="!loading && !loadError ? listId : undefined" :data-drop-index="cards.length">
+  <div class="list-cards" :aria-busy="loading" :data-drop-list="!loading && !loadError && !needle ? listId : undefined" :data-drop-index="cards.length">
     <p v-if="loading" role="status">Загружаем карточки…</p>
     <div v-else-if="loadError" role="alert"><p class="error">{{ loadError }}</p><button class="secondary" @click="load">Повторить</button></div>
     <template v-else>
-      <p v-if="cards.length === 0" class="list-placeholder">Пока нет карточек</p>
+      <p v-if="needle && matchedCount === 0" class="list-placeholder">Нет совпадений в этом списке</p>
+      <p v-else-if="cards.length === 0" class="list-placeholder">Пока нет карточек</p>
       <TransitionGroup name="card-order" tag="div">
-      <div v-for="(card, index) in cards" :key="card.id">
+      <div v-for="(card, index) in cards" v-show="matches(card)" :key="card.id">
         <div v-if="movement.dragged.value" class="card-drop" :class="{ 'drop-active': active(index) }" :data-drop-list="listId" :data-drop-index="index">Поместить сюда</div>
         <CardItem :card="card" :path="path" :index="index" :total="cards.length" @updated="update" @removed="remove" />
       </div>

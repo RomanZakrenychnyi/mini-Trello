@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { onMounted, provide, ref } from 'vue';
+import { computed, onMounted, provide, ref } from 'vue';
 import { request, type BoardList, type Card } from '../api';
 import { cardMovement } from '../cardMovement';
+import { boardSearch } from '../boardSearch';
 import ListColumn from './ListColumn.vue';
 
 const props = defineProps<{ boardId: string }>();
 const lists = ref<BoardList[]>([]);
+const query = ref('');
+const searchActive = computed(() => query.value.trim().length > 0);
+const searchResults = ref<Record<string, { count: number; failed: boolean } | null>>({});
+const resultsLoading = computed(() => lists.value.some(list => !searchResults.value[list.id]));
+const resultsFailed = computed(() => lists.value.some(list => searchResults.value[list.id]?.failed));
+const resultCount = computed(() => lists.value.reduce((sum, list) => sum + (searchResults.value[list.id]?.count ?? 0), 0));
+provide(boardSearch, { query, report: (id, result) => { searchResults.value[id] = result; } });
 const loading = ref(true);
 const loadError = ref('');
 const createError = ref('');
@@ -20,7 +28,7 @@ const revision = ref(0);
 const moveError = ref('');
 const moveStatus = ref('');
 async function move(card: Card, targetListId: string, position: number) {
-  if (moving.value) return;
+  if (moving.value || searchActive.value) return;
   moving.value = true;
   dragged.value = null;
   target.value = null;
@@ -36,7 +44,7 @@ async function move(card: Card, targetListId: string, position: number) {
     moveError.value = cause instanceof Error ? cause.message : 'Не удалось переместить карточку';
   } finally { revision.value++; moving.value = false; }
 }
-provide(cardMovement, { lists, dragged, target, preview, moving, revision, move });
+provide(cardMovement, { lists, dragged, target, preview, moving, searchActive, revision, move });
 
 async function load() {
   loading.value = true;
@@ -82,6 +90,22 @@ onMounted(load);
     <p v-if="loading" role="status">Загружаем списки…</p>
     <div v-else-if="loadError" role="alert"><p class="error">{{ loadError }}</p><button @click="load">Повторить загрузку</button></div>
     <template v-else>
+      <div class="board-search">
+        <label for="card-search">Поиск карточек на доске</label>
+        <div class="form-row">
+          <input id="card-search" v-model="query" type="search" placeholder="Название или описание" :disabled="moving || !!dragged" aria-describedby="search-status" @keydown.esc="query = ''" />
+          <button v-if="query" class="secondary" :disabled="moving || !!dragged" @click="query = ''">Сбросить поиск</button>
+        </div>
+        <p id="search-status" role="status" aria-live="polite" aria-atomic="true">
+          <template v-if="searchActive">
+            <template v-if="resultsLoading">Загружаем карточки для поиска…</template>
+            <template v-else-if="resultsFailed">Найдено в загруженных списках: {{ resultCount }}. Поиск неполный: не все списки удалось загрузить.</template>
+            <template v-else-if="resultCount === 0">Ничего не найдено</template>
+            <template v-else>Найдено карточек: {{ resultCount }}</template>
+          </template>
+        </p>
+        <p v-if="searchActive" class="list-hint">Чтобы перемещать карточки, сбросьте поиск.</p>
+      </div>
       <p v-if="lists.length === 0" class="intro">На доске пока нет списков. Добавьте первый — например, «Нужно сделать».</p>
       <fieldset class="lists-row" :disabled="moving || preview?.settling">
         <ListColumn v-for="list in lists" :key="list.id" :list="list" @updated="updated" @removed="lists = lists.filter((item) => item.id !== $event)" />

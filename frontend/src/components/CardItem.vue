@@ -10,7 +10,7 @@ let pointerStart: { x: number; y: number; offsetX: number; offsetY: number; widt
 const article = ref<HTMLElement | null>(null);
 let settleTimer: ReturnType<typeof setTimeout> | undefined;
 function start(event: PointerEvent) {
-  if (busy.value || movement.moving.value || movement.preview.value?.settling || event.button !== 0 || !article.value) return;
+  if (busy.value || movement.moving.value || movement.searchActive.value || movement.preview.value?.settling || event.button !== 0 || !article.value) return;
   const rect = article.value.getBoundingClientRect();
   pointerStart = { x: event.clientX, y: event.clientY, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top, width: rect.width, height: rect.height };
   window.addEventListener('keydown', escapeDrag);
@@ -108,13 +108,13 @@ async function remove() {
   <article ref="article" class="task-card" :class="{ 'card-drag-origin': movement.dragged.value?.id === card.id }" :aria-label="`Карточка ${card.title}`" :aria-busy="busy">
     <CardForm v-if="editing" :id="card.id" :initial-title="card.title" :initial-description="card.description" :busy="busy" submit-label="Сохранить карточку" @save="save" @cancel="cancel" />
     <template v-else>
-      <span class="drag-handle secondary" role="img" :aria-label="`Перетащить карточку ${card.title}`" title="Перетащить карточку" @pointerdown.prevent="start" @pointermove="pointerMove" @pointerup="release" @pointercancel="cancelDrag" @lostpointercapture="cancelDrag">⠿</span>
+      <span v-if="!movement.searchActive.value" class="drag-handle secondary" role="img" :aria-label="`Перетащить карточку ${card.title}`" title="Перетащить карточку" @pointerdown.prevent="start" @pointermove="pointerMove" @pointerup="release" @pointercancel="cancelDrag" @lostpointercapture="cancelDrag">⠿</span>
       <h4>{{ card.title }}</h4>
       <p v-if="card.description" class="card-description">{{ card.description }}</p>
       <div v-if="!confirming" class="card-movement">
-        <button class="secondary" :disabled="busy || movement.moving.value || index === 0" aria-label="Переместить карточку выше" @click="movement.move(card, card.listId, index - 1)">↑</button>
-        <button class="secondary" :disabled="busy || movement.moving.value || index === total - 1" aria-label="Переместить карточку ниже" @click="movement.move(card, card.listId, index + 1)">↓</button>
-        <select aria-label="Переместить в начало другого списка" :disabled="busy || movement.moving.value" @change="transfer">
+        <button class="secondary" :disabled="busy || movement.moving.value || movement.searchActive.value || index === 0" aria-label="Переместить карточку выше" @click="movement.move(card, card.listId, index - 1)">↑</button>
+        <button class="secondary" :disabled="busy || movement.moving.value || movement.searchActive.value || index === total - 1" aria-label="Переместить карточку ниже" @click="movement.move(card, card.listId, index + 1)">↓</button>
+        <select aria-label="Переместить в начало другого списка" :disabled="busy || movement.moving.value || movement.searchActive.value" @change="transfer">
           <option value="">В другой список…</option>
           <option v-for="list in movement.lists.value.filter(item => item.id !== card.listId)" :key="list.id" :value="list.id">{{ list.name }}</option>
         </select>
