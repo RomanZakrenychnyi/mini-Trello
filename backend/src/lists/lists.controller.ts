@@ -18,4 +18,7 @@ export class ListsController {
 
   @Delete(':id')
   remove(@Param('boardId') boardId: string, @Param('id') id: string) { return this.lists.remove(boardId, id); }
+
+  @Patch(':id/move')
+  move(@Param('boardId') boardId: string, @Param('id') id: string, @Body() body: unknown) { return this.lists.move(boardId, id, body); }
 }

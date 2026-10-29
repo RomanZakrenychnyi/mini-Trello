@@ -30,6 +30,8 @@ const dragged = ref<Card | null>(null);
 const target = ref<{ listId: string; index: number } | null>(null);
 const preview = ref<{ x: number; y: number; width: number; height: number; settling: boolean } | null>(null);
 const moving = ref(false);
+const columnDragging = ref(false);
+const movementBusy = computed(() => moving.value || columnDragging.value);
 const revision = ref(0);
 const moveError = ref('');
 const moveStatus = ref('');
@@ -50,7 +52,27 @@ async function move(card: Card, targetListId: string, position: number) {
     moveError.value = cause instanceof Error ? cause.message : 'Не удалось переместить карточку';
   } finally { revision.value++; moving.value = false; }
 }
-provide(cardMovement, { lists, dragged, target, preview, moving, searchActive, revision, move });
+provide(cardMovement, { lists, dragged, target, preview, moving: movementBusy, searchActive, revision, move });
+
+async function moveList(list: BoardList, position: number) {
+  if (moving.value || dragged.value || columnDragging.value || saving.value) return;
+  const current = lists.value.findIndex(item => item.id === list.id);
+  if (current === position || position < 0 || position >= lists.value.length) return;
+  moving.value = true;
+  moveError.value = '';
+  moveStatus.value = 'Сохраняем порядок списков…';
+  try {
+    lists.value = await request<BoardList[]>(`${path}/${encodeURIComponent(list.id)}/move`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ position }),
+    });
+    moveStatus.value = 'Порядок списков сохранён';
+  } catch (cause) {
+    moveStatus.value = '';
+    moveError.value = cause instanceof Error ? cause.message : 'Не удалось переместить список';
+    try { lists.value = await request<BoardList[]>(path); }
+    catch { moveError.value += ' Не удалось обновить порядок. Обновите страницу перед повторной попыткой.'; }
+  } finally { moving.value = false; }
+}
 
 async function load() {
   loading.value = true;
@@ -90,7 +112,7 @@ onMounted(load);
 <template>
   <section aria-labelledby="lists-title" :aria-busy="loading">
     <h2 id="lists-title">Списки доски</h2>
-    <p class="list-hint">Перетаскивайте карточки за ручку «⠿» или используйте кнопки перемещения.</p>
+    <p class="list-hint">Перетаскивайте списки за заголовок, карточки — за ручку «⠿». Также доступны кнопки перемещения.</p>
     <p role="status">{{ moveStatus }}</p>
     <p v-if="moveError" class="error" role="alert">{{ moveError }}</p>
     <p v-if="loading" role="status">Загружаем списки…</p>
@@ -123,15 +145,17 @@ onMounted(load);
         <p v-if="searchActive" class="list-hint">Чтобы перемещать карточки, сбросьте поиск и выберите «Все».</p>
       </div>
       <p v-if="lists.length === 0" class="intro">На доске пока нет списков. Добавьте первый — например, «Нужно сделать».</p>
-      <fieldset class="lists-row" :disabled="moving || preview?.settling">
-        <ListColumn v-for="list in lists" :key="list.id" :list="list" @updated="updated" @removed="lists = lists.filter((item) => item.id !== $event)" />
-        <form class="list-create" @submit.prevent="create">
+      <fieldset class="lists-board" :disabled="moving || columnDragging || preview?.settling">
+      <TransitionGroup name="list-order" tag="div" class="lists-row">
+        <ListColumn v-for="(list, index) in lists" :key="list.id" :list="list" :index="index" :total="lists.length" :movement-disabled="moving || !!dragged || columnDragging || saving" @move="moveList(list, $event)" @dragging="columnDragging = $event" @updated="updated" @removed="lists = lists.filter((item) => item.id !== $event)" />
+        <form key="new-list" class="list-create" @submit.prevent="create">
           <h3>Новый список</h3>
           <label for="list-name">Название списка</label>
           <input id="list-name" v-model="name" required maxlength="100" :disabled="saving" placeholder="Например, В работе" :aria-invalid="!!createError" :aria-describedby="createError ? 'list-create-error' : undefined" />
           <p v-if="createError" id="list-create-error" class="error" role="alert">{{ createError }}</p>
           <button :disabled="saving">{{ saving ? 'Добавляем…' : 'Добавить список' }}</button>
         </form>
+      </TransitionGroup>
       </fieldset>
     </template>
   </section>

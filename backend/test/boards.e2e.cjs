@@ -229,6 +229,24 @@ test('boards, lists and cards validate input, isolate data and persist across re
     assert.equal(await prisma.card.count({ where: { listId: { in: doomedLists } } }), 0);
     assert.deepEqual(await (await send(cardsPath)).json(), [updatedCard, thirdCard]);
     assert.deepEqual(await (await send(`/boards/${otherBoard.id}`)).json(), otherBoard);
+    const listMovePath = `${listPath}/${thirdList.id}/move`;
+    for (const invalid of [{}, { position: -1 }, { position: 0.5 }, { position: '0' }, { position: 99 }]) {
+      assert.equal((await mutate(listMovePath, 'PATCH', invalid)).status, 400);
+    }
+    assert.equal((await mutate(`${otherPath}/${thirdList.id}/move`, 'PATCH', { position: 0 })).status, 404);
+    assert.equal((await mutate(`${listPath}/missing/move`, 'PATCH', { position: 0 })).status, 404);
+    const listMove = await mutate(listMovePath, 'PATCH', { position: 0 });
+    assert.equal(listMove.status, 200);
+    const reordered = await listMove.json();
+    assert.deepEqual(reordered.map(list => [list.id, list.position]), [[thirdList.id, 0], [firstList.id, 1]]);
+    assert.deepEqual(await (await send(cardsPath)).json(), [updatedCard, thirdCard]);
+    const restoredLists = await (await mutate(listMovePath, 'PATCH', { position: 1 })).json();
+    Object.assign(renamed, restoredLists[0]);
+    Object.assign(thirdList, restoredLists[1]);
+    assert.deepEqual(await (await send(otherPath)).json(), []);
+    const persistedOrder = await (await mutate(listMovePath, 'PATCH', { position: 0 })).json();
+    Object.assign(thirdList, persistedOrder[0]);
+    Object.assign(renamed, persistedOrder[1]);
     await app.close();
     app = undefined;
     process.env.NODE_ENV = 'production';
@@ -238,7 +256,7 @@ test('boards, lists and cards validate input, isolate data and persist across re
     assert.deepEqual(await (await send('/api/health')).json(), { status: 'ok' });
     assert.deepEqual(await (await send(`/api/boards/${board.id}`)).json(), board);
     assert.equal((await send(`/api/boards/${doomed.id}`)).status, 404);
-    assert.deepEqual(await (await send(`/api${listPath}`)).json(), [renamed, thirdList]);
+    assert.deepEqual(await (await send(`/api${listPath}`)).json(), [thirdList, renamed]);
     assert.deepEqual(await (await send(`/api${cardsPath}`)).json(), [updatedCard, thirdCard]);
     assert.equal((await send('/api/missing')).status, 404);
     for (const path of ['/', `/boards/${board.id}`]) {

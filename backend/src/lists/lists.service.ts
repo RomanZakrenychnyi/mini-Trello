@@ -49,6 +49,36 @@ export class ListsService {
     }
   }
 
+  async move(boardId: string, id: string, body: unknown) {
+    if (!body || typeof body !== 'object' || !('position' in body) || typeof body.position !== 'number' || !Number.isSafeInteger(body.position) || body.position < 0) {
+      throw new BadRequestException('Укажите целую позицию от 0');
+    }
+    const position = body.position;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const lists = await tx.boardList.findMany({ where: { boardId }, orderBy: { position: 'asc' } });
+          const source = lists.findIndex(list => list.id === id);
+          if (source < 0) throw new NotFoundException('Список не найден на этой доске');
+          if (position >= lists.length) throw new BadRequestException('Позиция выходит за границы доски');
+          const [list] = lists.splice(source, 1);
+          lists.splice(position, 0, list!);
+          // Vacate occupied positions before assigning the final contiguous order.
+          const offset = Math.max(...lists.map(item => item.position)) + 1;
+          await tx.boardList.updateMany({ where: { boardId }, data: { position: { increment: offset } } });
+          for (let index = 0; index < lists.length; index++) {
+            await tx.boardList.update({ where: { id: lists[index]!.id }, data: { position: index } });
+          }
+          return tx.boardList.findMany({ where: { boardId }, orderBy: { position: 'asc' } });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2034'].includes(error.code)) continue;
+        throw error;
+      }
+    }
+    throw new ConflictException('Доска изменилась параллельно. Обновите её и повторите перемещение.');
+  }
+
   async remove(boardId: string, id: string) {
     try {
       const deleted = await this.prisma.boardList.deleteMany({ where: { id, boardId, cards: { none: {} } } });

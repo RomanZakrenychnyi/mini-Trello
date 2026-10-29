@@ -1,10 +1,73 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue';
+import { nextTick, onBeforeUnmount, ref } from 'vue';
 import { request, type BoardList } from '../api';
 import ListCards from './ListCards.vue';
 
-const props = defineProps<{ list: BoardList }>();
-const emit = defineEmits<{ updated: [list: BoardList]; removed: [id: string] }>();
+const props = defineProps<{ list: BoardList; index: number; total: number; movementDisabled: boolean }>();
+const emit = defineEmits<{ updated: [list: BoardList]; removed: [id: string]; move: [position: number]; dragging: [active: boolean] }>();
+const column = ref<HTMLElement | null>(null);
+const draggingColumn = ref(false);
+let origin: { x: number; y: number; offsetX: number; offsetY: number; width: number } | null = null;
+let ghost: HTMLElement | null = null;
+let marker: HTMLElement | null = null;
+let dropPosition: number | null = null;
+function clearMarker() { marker?.removeAttribute('data-column-drop'); marker = null; }
+function cancelDrag() {
+  origin = null;
+  draggingColumn.value = false;
+  ghost?.remove(); ghost = null;
+  clearMarker(); dropPosition = null;
+  window.removeEventListener('keydown', escapeDrag);
+  emit('dragging', false);
+}
+function escapeDrag(event: KeyboardEvent) { if (event.key === 'Escape') cancelDrag(); }
+function startDrag(event: PointerEvent) {
+  if (props.movementDisabled || busy.value || event.button !== 0 || !column.value) return;
+  const rect = column.value.getBoundingClientRect();
+  origin = { x: event.clientX, y: event.clientY, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top, width: rect.width };
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  window.addEventListener('keydown', escapeDrag);
+}
+function drag(event: PointerEvent) {
+  if (!origin || !column.value) return;
+  if (!ghost && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) < 6) return;
+  if (!ghost) {
+    ghost = column.value.cloneNode(true) as HTMLElement;
+    ghost.removeAttribute('data-list-index');
+    ghost.removeAttribute('aria-label');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.inert = true;
+    ghost.querySelectorAll('[id]').forEach(item => item.removeAttribute('id'));
+    ghost.classList.add('list-drag-preview');
+    ghost.style.width = `${origin.width}px`;
+    document.body.append(ghost);
+    draggingColumn.value = true;
+    emit('dragging', true);
+  }
+  ghost.style.transform = `translate3d(${event.clientX - origin.offsetX}px, ${event.clientY - origin.offsetY}px, 0)`;
+  const row = column.value.closest<HTMLElement>('.lists-row');
+  if (!row) return;
+  const bounds = row.getBoundingClientRect();
+  if (event.clientX > bounds.right - 32) row.scrollLeft += 20;
+  if (event.clientX < bounds.left + 32) row.scrollLeft -= 20;
+  clearMarker(); dropPosition = null;
+  if (event.clientY < bounds.top || event.clientY > bounds.bottom || event.clientX < bounds.left || event.clientX > bounds.right) return;
+  const columns = [...row.querySelectorAll<HTMLElement>('[data-list-index]')];
+  const hovered = columns.find(item => event.clientX < item.getBoundingClientRect().right) ?? columns.at(-1);
+  if (!hovered) return;
+  const rect = hovered.getBoundingClientRect();
+  const after = event.clientX >= rect.left + rect.width / 2;
+  const index = Number(hovered.dataset.listIndex) + (after ? 1 : 0);
+  dropPosition = index > props.index ? index - 1 : index;
+  marker = hovered;
+  marker.dataset.columnDrop = after ? 'after' : 'before';
+}
+function releaseDrag() {
+  const position = ghost ? dropPosition : null;
+  cancelDrag();
+  if (position !== null) emit('move', position);
+}
+onBeforeUnmount(cancelDrag);
 const editing = ref(false);
 const confirming = ref(false);
 const name = ref('');
@@ -63,13 +126,19 @@ async function remove() {
 </script>
 
 <template>
-  <article class="list-column" :aria-label="`Список ${list.name}`" :aria-busy="busy">
+  <article ref="column" class="list-column" :class="{ 'list-drag-origin': draggingColumn }" :data-list-index="index" :aria-label="`Список ${list.name}`" :aria-busy="busy">
     <form v-if="editing" @submit.prevent="rename">
       <label :for="`rename-${list.id}`">Название списка</label>
       <input :id="`rename-${list.id}`" ref="input" v-model="name" required maxlength="100" :disabled="busy" :aria-invalid="!!error" :aria-describedby="error ? `error-${list.id}` : undefined" @keydown.esc="!busy && cancel()" />
       <div class="list-actions"><button :disabled="busy">{{ busy ? 'Сохраняем…' : 'Сохранить' }}</button><button type="button" class="secondary" :disabled="busy" @click="cancel">Отмена</button></div>
     </form>
-    <h3 v-else>{{ list.name }}</h3>
+    <div v-else class="list-heading">
+      <h3 class="column-drag-handle" :title="`Перетащить список ${list.name}`" @pointerdown.prevent="startDrag" @pointermove="drag" @pointerup="releaseDrag" @pointercancel="cancelDrag" @lostpointercapture="cancelDrag">⠿ {{ list.name }}</h3>
+      <div class="list-order-actions">
+        <button class="secondary" :disabled="movementDisabled || busy || index === 0" :aria-label="`Переместить список ${list.name} влево`" @click="emit('move', index - 1)">←</button>
+        <button class="secondary" :disabled="movementDisabled || busy || index === total - 1" :aria-label="`Переместить список ${list.name} вправо`" @click="emit('move', index + 1)">→</button>
+      </div>
+    </div>
     <ListCards :board-id="list.boardId" :list-id="list.id" @count="cardCount = $event" />
     <template v-if="!editing">
       <div v-if="confirming" class="delete-confirm">
