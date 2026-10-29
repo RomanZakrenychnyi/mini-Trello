@@ -1,19 +1,13 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, inject, onBeforeUnmount, ref } from 'vue';
 import { cardMovement } from '../cardMovement';
+import { boardSearch } from '../boardSearch';
 import { request, type Card, type CardInput } from '../api';
 import CardForm from './CardForm.vue';
 
 const props = defineProps<{ card: Card; path: string; index: number; total: number }>();
 const movement = inject(cardMovement)!;
-function localDay() {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-const today = ref(localDay());
-let dayTimer: ReturnType<typeof setInterval> | undefined;
-onMounted(() => { dayTimer = setInterval(() => { today.value = localDay(); }, 30000); });
-onBeforeUnmount(() => clearInterval(dayTimer));
+const today = inject(boardSearch)!.today;
 const overdue = computed(() => !!props.card.dueDate && !props.card.completed && props.card.dueDate < today.value);
 const formattedDate = computed(() => props.card.dueDate?.split('-').reverse().join('.'));
 let pointerStart: { x: number; y: number; offsetX: number; offsetY: number; width: number; height: number } | null = null;

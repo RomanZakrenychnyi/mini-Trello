@@ -65,6 +65,9 @@ button:disabled { opacity: .6; cursor: wait; }
 .list-hint { font-size: 12px; color: #526580; line-height: 1.5; }
 .board-search { margin: 20px 0; padding: 20px; background: white; border: 1px solid #dce4ef; border-radius: 12px; }
 .board-search [role="status"] { color: #526580; margin-bottom: 0; }
+.card-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.card-filters label { margin: 0; }
+.card-filters select { padding: 10px 12px; border: 1px solid #aebed2; border-radius: 8px; background: white; color: #172b4d; font: inherit; max-width: 100%; }
 .board-action-panel { margin-top: 20px; padding: 20px; border: 1px solid #dce4ef; border-radius: 12px; background: white; max-width: 640px; }
 .board-action-panel input { width: 100%; }
 .board-delete-panel { border-color: #e9aaa5; }

@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, provide, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, provide, ref } from 'vue';
 import { request, type BoardList, type Card } from '../api';
 import { cardMovement } from '../cardMovement';
-import { boardSearch } from '../boardSearch';
+import { boardSearch, localDay, type CardFilter } from '../boardSearch';
 import ListColumn from './ListColumn.vue';
 
 const props = defineProps<{ boardId: string }>();
 const lists = ref<BoardList[]>([]);
 const query = ref('');
-const searchActive = computed(() => query.value.trim().length > 0);
+const filter = ref<CardFilter>('all');
+const today = ref(localDay());
+let dayTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => { dayTimer = setInterval(() => { today.value = localDay(); }, 30000); });
+onBeforeUnmount(() => clearInterval(dayTimer));
+const searchActive = computed(() => query.value.trim().length > 0 || filter.value !== 'all');
+function resetFilters() { query.value = ''; filter.value = 'all'; }
 const searchResults = ref<Record<string, { count: number; failed: boolean } | null>>({});
 const resultsLoading = computed(() => lists.value.some(list => !searchResults.value[list.id]));
 const resultsFailed = computed(() => lists.value.some(list => searchResults.value[list.id]?.failed));
 const resultCount = computed(() => lists.value.reduce((sum, list) => sum + (searchResults.value[list.id]?.count ?? 0), 0));
-provide(boardSearch, { query, report: (id, result) => { searchResults.value[id] = result; } });
+provide(boardSearch, { query, filter, today, report: (id, result) => { searchResults.value[id] = result; } });
 const loading = ref(true);
 const loadError = ref('');
 const createError = ref('');
@@ -96,15 +102,25 @@ onMounted(load);
           <input id="card-search" v-model="query" type="search" placeholder="Название или описание" :disabled="moving || !!dragged" aria-describedby="search-status" @keydown.esc="query = ''" />
           <button v-if="query" class="secondary" :disabled="moving || !!dragged" @click="query = ''">Сбросить поиск</button>
         </div>
+        <div class="card-filters">
+          <label for="card-filter">Показать карточки</label>
+          <select id="card-filter" v-model="filter" :disabled="moving || !!dragged" aria-describedby="search-status">
+            <option value="all">Все</option>
+            <option value="pending">Невыполненные</option>
+            <option value="completed">Выполненные</option>
+            <option value="overdue">Просроченные</option>
+          </select>
+          <button v-if="searchActive" class="secondary" :disabled="moving || !!dragged" @click="resetFilters">Сбросить все фильтры</button>
+        </div>
         <p id="search-status" role="status" aria-live="polite" aria-atomic="true">
           <template v-if="searchActive">
-            <template v-if="resultsLoading">Загружаем карточки для поиска…</template>
+            <template v-if="resultsLoading">Загружаем карточки…</template>
             <template v-else-if="resultsFailed">Найдено в загруженных списках: {{ resultCount }}. Поиск неполный: не все списки удалось загрузить.</template>
             <template v-else-if="resultCount === 0">Ничего не найдено</template>
             <template v-else>Найдено карточек: {{ resultCount }}</template>
           </template>
         </p>
-        <p v-if="searchActive" class="list-hint">Чтобы перемещать карточки, сбросьте поиск.</p>
+        <p v-if="searchActive" class="list-hint">Чтобы перемещать карточки, сбросьте поиск и выберите «Все».</p>
       </div>
       <p v-if="lists.length === 0" class="intro">На доске пока нет списков. Добавьте первый — например, «Нужно сделать».</p>
       <fieldset class="lists-row" :disabled="moving || preview?.settling">
