@@ -60,7 +60,7 @@ onMounted(load);
 
 <template>
   <div class="list-cards" :aria-busy="loading" :data-drop-list="!loading && !loadError && !movement.searchActive.value ? listId : undefined" :data-drop-index="cards.length">
-    <p v-if="loading" role="status">Загружаем карточки…</p>
+    <p v-if="loading" class="loading-state" role="status">Загружаем карточки…</p>
     <div v-else-if="loadError" role="alert"><p class="error">{{ loadError }}</p><button class="secondary" @click="load">Повторить</button></div>
     <template v-else>
       <p v-if="movement.searchActive.value && matchedCount === 0" class="list-placeholder">Нет совпадений в этом списке</p>

@@ -13,6 +13,7 @@ const title = ref('');
 const editing = ref<string | null>(null);
 const editTitle = ref('');
 const confirming = ref<string | null>(null);
+const expanded = ref(false);
 const completedCount = computed(() => items.value.filter(item => item.completed).length);
 let generation = 0;
 
@@ -43,7 +44,7 @@ async function mutate(action: () => Promise<void>) {
   emit('busy', true);
   error.value = '';
   try { await action(); }
-  catch (cause) { error.value = cause instanceof Error ? cause.message : 'Не удалось изменить чек-лист'; }
+  catch (cause) { expanded.value = true; error.value = cause instanceof Error ? cause.message : 'Не удалось изменить чек-лист'; }
   finally { saving.value = false; emit('busy', false); }
 }
 async function create() {
@@ -94,13 +95,18 @@ onBeforeUnmount(() => { generation++; emit('busy', false); });
 
 <template>
   <section class="card-checklist" :aria-labelledby="`checklist-${cardId}`" :aria-busy="loading || saving">
-    <h5 :id="`checklist-${cardId}`">Чек-лист</h5>
-    <p v-if="loading" role="status">Загружаем пункты…</p>
+    <h5 :id="`checklist-${cardId}`">
+      <button class="checklist-disclosure" type="button" :aria-expanded="expanded" :aria-controls="`checklist-content-${cardId}`" @click="expanded = !expanded">
+        <span>☑ Чек-лист</span><span v-if="!loading && !loadError" class="checklist-count">{{ completedCount }} из {{ items.length }}</span><span class="disclosure-chevron" aria-hidden="true">{{ expanded ? '⌃' : '⌄' }}</span>
+      </button>
+    </h5>
+    <p v-if="loading" class="loading-state" role="status">Загружаем пункты…</p>
     <div v-else-if="loadError"><p class="error" role="alert">{{ loadError }}</p><button class="secondary" :disabled="disabled" @click="load">Повторить загрузку чек-листа</button></div>
     <template v-else>
-      <p class="checklist-progress" role="status">{{ completedCount }} из {{ items.length }} выполнено</p>
+      <p class="visually-hidden" role="status">{{ completedCount }} из {{ items.length }} выполнено</p>
       <progress v-if="items.length" :value="completedCount" :max="items.length" aria-label="Прогресс чек-листа" />
-      <p v-else class="list-hint">Разбейте задачу на небольшие шаги.</p>
+      <div v-show="expanded" :id="`checklist-content-${cardId}`" class="checklist-content">
+      <p v-if="items.length === 0" class="list-hint">Разбейте задачу на небольшие шаги.</p>
       <fieldset class="checklist-fields" :disabled="disabled || saving">
         <ul class="checklist-items">
           <li v-for="item in items" :key="item.id" class="checklist-item">
@@ -133,6 +139,7 @@ onBeforeUnmount(() => { generation++; emit('busy', false); });
         </form>
       </fieldset>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
+      </div>
     </template>
   </section>
 </template>

@@ -52,9 +52,14 @@ onMounted(load);
   </section>
   <section aria-labelledby="boards-title" :aria-busy="loading">
     <h2 id="boards-title">Ваши доски <span v-if="!loading && !loadError" class="count">{{ boards.length }}</span></h2>
-    <p v-if="loading" role="status">Загружаем доски…</p>
+    <p v-if="loading" class="loading-state" role="status">Загружаем доски…</p>
     <div v-else-if="loadError" role="alert"><p class="error">{{ loadError }}</p><button class="secondary" @click="load">Повторить загрузку</button></div>
     <div v-else-if="boards.length === 0" class="empty"><h3>Здесь начнётся ваш следующий проект</h3><p>Создайте первую доску с помощью формы выше.</p></div>
-    <div v-else class="board-grid"><RouterLink v-for="board in boards" :key="board.id" :to="`/boards/${board.id}`" class="board-card"><span class="board-icon" aria-hidden="true">▤</span><h3>{{ board.name }}</h3><span>Открыть доску →</span></RouterLink></div>
+    <div v-else class="board-grid">
+      <RouterLink v-for="board in boards" :key="board.id" :to="`/boards/${board.id}`" class="board-card">
+        <div class="board-cover" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="board-card-body"><h3>{{ board.name }}</h3><p class="board-meta">Создана {{ new Date(board.createdAt).toLocaleDateString('ru-RU') }}</p><span class="board-card-link">Открыть доску <span aria-hidden="true">↗</span></span></div>
+      </RouterLink>
+    </div>
   </section>
 </template>

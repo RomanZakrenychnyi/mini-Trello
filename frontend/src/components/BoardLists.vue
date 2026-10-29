@@ -111,18 +111,20 @@ onMounted(load);
 
 <template>
   <section aria-labelledby="lists-title" :aria-busy="loading">
-    <h2 id="lists-title">Списки доски</h2>
-    <p class="list-hint">Перетаскивайте списки за заголовок, карточки — за ручку «⠿». Также доступны кнопки перемещения.</p>
+    <div class="lists-section-heading"><h2 id="lists-title">Списки доски <span class="count">{{ lists.length }}</span></h2>
+    <p class="list-hint">Списки — за заголовок, карточки — за «⠿»</p></div>
     <p role="status">{{ moveStatus }}</p>
     <p v-if="moveError" class="error" role="alert">{{ moveError }}</p>
-    <p v-if="loading" role="status">Загружаем списки…</p>
+    <p v-if="loading" class="loading-state" role="status">Загружаем списки…</p>
     <div v-else-if="loadError" role="alert"><p class="error">{{ loadError }}</p><button @click="load">Повторить загрузку</button></div>
     <template v-else>
       <div class="board-search">
+        <div class="search-input-group">
         <label for="card-search">Поиск карточек на доске</label>
         <div class="form-row">
           <input id="card-search" v-model="query" type="search" placeholder="Название или описание" :disabled="moving || !!dragged" aria-describedby="search-status" @keydown.esc="query = ''" />
           <button v-if="query" class="secondary" :disabled="moving || !!dragged" @click="query = ''">Сбросить поиск</button>
+        </div>
         </div>
         <div class="card-filters">
           <label for="card-filter">Показать карточки</label>

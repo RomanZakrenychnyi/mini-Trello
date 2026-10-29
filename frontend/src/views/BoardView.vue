@@ -34,11 +34,13 @@ watch(() => route.params.id, load, { immediate: true });
 
 <template>
   <RouterLink to="/" class="back-link">← Все доски</RouterLink>
-  <p v-if="loading" role="status">Загружаем доску…</p>
+  <p v-if="loading" class="loading-state" role="status">Загружаем доску…</p>
   <section v-else-if="error" role="alert"><h1>{{ missing ? 'Доска не найдена' : 'Не удалось открыть доску' }}</h1><p class="error">{{ error }}</p><button v-if="!missing" @click="load">Повторить</button></section>
   <template v-else-if="board">
-    <div class="heading"><p class="eyebrow">ДОСКА ПРОЕКТА</p><h1>{{ board.name }}</h1><p class="intro">Создана {{ new Date(board.createdAt).toLocaleDateString('ru-RU') }}</p></div>
+    <div class="board-heading">
+    <div class="heading"><p class="eyebrow">ДОСКА ПРОЕКТА</p><h1>{{ board.name }}</h1><p class="board-meta">Создана {{ new Date(board.createdAt).toLocaleDateString('ru-RU') }}</p></div>
     <BoardActions :key="board.id" :board="board" @updated="board = $event" @removed="router.replace('/')" />
+    </div>
     <BoardLists :key="board.id" :board-id="board.id" />
   </template>
 </template>

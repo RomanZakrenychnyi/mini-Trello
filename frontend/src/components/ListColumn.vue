@@ -133,7 +133,7 @@ async function remove() {
       <div class="list-actions"><button :disabled="busy">{{ busy ? 'Сохраняем…' : 'Сохранить' }}</button><button type="button" class="secondary" :disabled="busy" @click="cancel">Отмена</button></div>
     </form>
     <div v-else class="list-heading">
-      <h3 class="column-drag-handle" :title="`Перетащить список ${list.name}`" @pointerdown.prevent="startDrag" @pointermove="drag" @pointerup="releaseDrag" @pointercancel="cancelDrag" @lostpointercapture="cancelDrag">⠿ {{ list.name }}</h3>
+      <h3 class="column-drag-handle" :title="`Перетащить список ${list.name}`" @pointerdown.prevent="startDrag" @pointermove="drag" @pointerup="releaseDrag" @pointercancel="cancelDrag" @lostpointercapture="cancelDrag"><span class="column-grip" aria-hidden="true">⠿</span> {{ list.name }} <span v-if="cardCount !== null" class="list-count" :aria-label="`Карточек: ${cardCount}`">{{ cardCount }}</span></h3>
       <div class="list-order-actions">
         <button class="secondary" :disabled="movementDisabled || busy || index === 0" :aria-label="`Переместить список ${list.name} влево`" @click="emit('move', index - 1)">←</button>
         <button class="secondary" :disabled="movementDisabled || busy || index === total - 1" :aria-label="`Переместить список ${list.name} вправо`" @click="emit('move', index + 1)">→</button>
