@@ -123,6 +123,8 @@ onMounted(load);
     <article v-if="preview && dragged" class="task-card drag-preview" :class="{ 'drag-settling': preview.settling }" aria-hidden="true" :style="{ width: `${preview.width}px`, height: `${preview.height}px`, transform: `translate3d(${preview.x}px, ${preview.y}px, 0)` }">
       <span class="drag-handle secondary">⠿</span>
       <h4>{{ dragged.title }}</h4>
+      <p v-if="dragged.dueDate" class="card-deadline">Срок: {{ dragged.dueDate.split('-').reverse().join('.') }}</p>
+      <span class="completion-button secondary preview-button">{{ dragged.completed ? '✓ Выполнено' : 'Отметить выполненной' }}</span>
       <p v-if="dragged.description" class="card-description">{{ dragged.description }}</p>
       <div class="card-movement"><span class="secondary preview-button">↑</span><span class="secondary preview-button">↓</span><span class="preview-list">В другой список…</span></div>
       <div class="list-actions"><span class="secondary preview-button">Редактировать</span><span class="danger-link preview-button">Удалить карточку</span></div>

@@ -48,6 +48,16 @@ button:disabled { opacity: .6; cursor: wait; }
 .task-card { background: white; border: 1px solid #dce4ef; border-radius: 8px; padding: 14px; margin: 12px 0; overflow-wrap: anywhere; }
 .task-card h4 { margin: 0; font-size: 16px; }
 .card-description { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-size: 14px; max-height: 180px; overflow-y: auto; }
+.card-overdue { border-color: #d92d20; }
+.card-completed { border-color: #69a780; }
+.card-completed h4 { color: #526580; text-decoration: line-through; }
+.card-deadline { font-size: 13px; color: #526580; }
+.deadline-overdue { color: #b42318; font-weight: 600; }
+.completion-button { margin-top: 10px; padding: 6px 10px; font-size: 12px; }
+.completion-button[aria-pressed="true"] { background: #dcf3e4; color: #175d32; }
+.card-form .completion-toggle { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+.card-form .completion-toggle input { width: auto; flex: none; }
+.clear-date { margin-top: 8px; padding: 6px 10px; font-size: 12px; }
 .card-form { margin: 16px 0; }
 .card-form label:not(:first-child) { margin-top: 12px; }
 .card-form textarea { width: 100%; resize: vertical; padding: 10px; border: 1px solid #aebed2; border-radius: 8px; font: inherit; }

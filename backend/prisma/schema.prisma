@@ -34,6 +34,8 @@ model Card {
   list        BoardList @relation(fields: [listId], references: [id], onDelete: Restrict)
   title       String
   description String    @default("")
+  dueDate     String?
+  completed   Boolean   @default(false)
   position    Int
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

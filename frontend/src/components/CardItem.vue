@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { inject, onBeforeUnmount, ref } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 import { cardMovement } from '../cardMovement';
-import { request, type Card } from '../api';
+import { request, type Card, type CardInput } from '../api';
 import CardForm from './CardForm.vue';
 
 const props = defineProps<{ card: Card; path: string; index: number; total: number }>();
 const movement = inject(cardMovement)!;
+function localDay() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+const today = ref(localDay());
+let dayTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => { dayTimer = setInterval(() => { today.value = localDay(); }, 30000); });
+onBeforeUnmount(() => clearInterval(dayTimer));
+const overdue = computed(() => !!props.card.dueDate && !props.card.completed && props.card.dueDate < today.value);
+const formattedDate = computed(() => props.card.dueDate?.split('-').reverse().join('.'));
 let pointerStart: { x: number; y: number; offsetX: number; offsetY: number; width: number; height: number } | null = null;
 const article = ref<HTMLElement | null>(null);
 let settleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -81,7 +91,7 @@ const confirming = ref(false);
 const busy = ref(false);
 const error = ref('');
 function cancel() { editing.value = false; confirming.value = false; error.value = ''; }
-async function save(data: { title: string; description: string }) {
+async function save(data: CardInput) {
   if (busy.value) return;
   busy.value = true;
   error.value = '';
@@ -90,6 +100,15 @@ async function save(data: { title: string; description: string }) {
     emit('updated', card);
     cancel();
   } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Не удалось сохранить карточку'; }
+  finally { busy.value = false; }
+}
+async function toggleCompleted() {
+  if (busy.value) return;
+  busy.value = true;
+  error.value = '';
+  try {
+    emit('updated', await request<Card>(`${props.path}/${props.card.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed: !props.card.completed }) }));
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Не удалось изменить отметку выполнения'; }
   finally { busy.value = false; }
 }
 async function remove() {
@@ -105,11 +124,13 @@ async function remove() {
 </script>
 
 <template>
-  <article ref="article" class="task-card" :class="{ 'card-drag-origin': movement.dragged.value?.id === card.id }" :aria-label="`Карточка ${card.title}`" :aria-busy="busy">
-    <CardForm v-if="editing" :id="card.id" :initial-title="card.title" :initial-description="card.description" :busy="busy" submit-label="Сохранить карточку" @save="save" @cancel="cancel" />
+  <article ref="article" class="task-card" :class="{ 'card-drag-origin': movement.dragged.value?.id === card.id, 'card-overdue': overdue, 'card-completed': card.completed }" :aria-label="`Карточка ${card.title}`" :aria-busy="busy">
+    <CardForm v-if="editing" :id="card.id" :initial-title="card.title" :initial-description="card.description" :initial-due-date="card.dueDate" :initial-completed="card.completed" :busy="busy" submit-label="Сохранить карточку" @save="save" @cancel="cancel" />
     <template v-else>
       <span v-if="!movement.searchActive.value" class="drag-handle secondary" role="img" :aria-label="`Перетащить карточку ${card.title}`" title="Перетащить карточку" @pointerdown.prevent="start" @pointermove="pointerMove" @pointerup="release" @pointercancel="cancelDrag" @lostpointercapture="cancelDrag">⠿</span>
       <h4>{{ card.title }}</h4>
+      <p v-if="card.dueDate" class="card-deadline" :class="{ 'deadline-overdue': overdue }"><time :datetime="card.dueDate">Срок: {{ formattedDate }}</time><span v-if="overdue"> · Просрочено</span></p>
+      <button class="completion-button secondary" :aria-pressed="card.completed" :disabled="busy || movement.moving.value" @click="toggleCompleted">{{ card.completed ? '✓ Выполнено' : 'Отметить выполненной' }}</button>
       <p v-if="card.description" class="card-description">{{ card.description }}</p>
       <div v-if="!confirming" class="card-movement">
         <button class="secondary" :disabled="busy || movement.moving.value || movement.searchActive.value || index === 0" aria-label="Переместить карточку выше" @click="movement.move(card, card.listId, index - 1)">↑</button>

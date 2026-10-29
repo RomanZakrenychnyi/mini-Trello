@@ -6,9 +6,9 @@ import { PrismaService } from '../prisma.service';
 export class CardsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private data(body: unknown, creating = false): { title?: string; description?: string } {
+  private data(body: unknown, creating = false): { title?: string; description?: string; dueDate?: string | null; completed?: boolean } {
     if (typeof body !== 'object' || body === null) throw new BadRequestException('Укажите данные карточки');
-    const data: { title?: string; description?: string } = {};
+    const data: { title?: string; description?: string; dueDate?: string | null; completed?: boolean } = {};
     if ('title' in body) {
       if (typeof body.title !== 'string' || !body.title.trim() || body.title.trim().length > 200) {
         throw new BadRequestException('Название должно содержать от 1 до 200 символов');
@@ -21,7 +21,19 @@ export class CardsService {
       }
       data.description = body.description;
     }
-    if (!Object.keys(data).length) throw new BadRequestException('Укажите название или описание');
+    if ('dueDate' in body) {
+      const date = body.dueDate;
+      if (date !== null && (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || date < '0001-01-01' ||
+          !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date)) {
+        throw new BadRequestException('Укажите существующую дату в формате ГГГГ-ММ-ДД или null');
+      }
+      data.dueDate = date as string | null;
+    }
+    if ('completed' in body) {
+      if (typeof body.completed !== 'boolean') throw new BadRequestException('Отметка выполнения должна быть true или false');
+      data.completed = body.completed;
+    }
+    if (!Object.keys(data).length) throw new BadRequestException('Укажите данные для изменения карточки');
     return data;
   }
 
@@ -43,7 +55,7 @@ export class CardsService {
       try {
         return await this.prisma.$transaction(async (tx) => {
           const last = await tx.card.aggregate({ where: { listId }, _max: { position: true } });
-          return tx.card.create({ data: { listId, title: data.title!, description: data.description ?? '', position: (last._max.position ?? -1) + 1 } });
+          return tx.card.create({ data: { listId, ...data, title: data.title!, position: (last._max.position ?? -1) + 1 } });
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError) {

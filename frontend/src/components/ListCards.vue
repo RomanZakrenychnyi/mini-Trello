@@ -2,7 +2,7 @@
 import { computed, inject, onMounted, ref, watch, watchEffect, onBeforeUnmount } from 'vue';
 import { boardSearch } from '../boardSearch';
 import { cardMovement } from '../cardMovement';
-import { request, type Card } from '../api';
+import { request, type Card, type CardInput } from '../api';
 import CardForm from './CardForm.vue';
 import CardItem from './CardItem.vue';
 
@@ -35,7 +35,7 @@ async function load() {
   catch (cause) { loadError.value = cause instanceof Error ? cause.message : 'Не удалось загрузить карточки'; }
   finally { loading.value = false; loaded = true; }
 }
-async function create(data: { title: string; description: string }) {
+async function create(data: CardInput) {
   if (busy.value) return;
   busy.value = true;
   createError.value = '';

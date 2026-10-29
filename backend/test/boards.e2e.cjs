@@ -103,6 +103,15 @@ test('boards, lists and cards validate input, isolate data and persist across re
     assert.equal(card.description, 'Строка 1\nСтрока 2 <script>test</script>');
     assert.equal(card.position, 0);
     assert.equal(card.listId, firstList.id);
+    assert.equal(card.dueDate, null);
+    assert.equal(card.completed, false);
+    for (const invalid of [
+      { dueDate: '' }, { dueDate: '2026-02-29' }, { dueDate: '2026-04-31' }, { dueDate: '0000-01-01' },
+      { dueDate: '2026-10-28T12:00:00Z' }, { dueDate: 123 }, { completed: 'true' }, { completed: null },
+    ]) {
+      assert.equal((await mutate(`${cardsPath}/${card.id}`, 'PATCH', invalid)).status, 400);
+      assert.equal((await send(cardsPath, { title: 'Некорректная', ...invalid })).status, 400);
+    }
     const secondCardResponse = await send(cardsPath, { title: 'a'.repeat(200), description: 'a'.repeat(5000) });
     assert.equal(secondCardResponse.status, 201);
     const secondCard = await secondCardResponse.json();
@@ -124,9 +133,22 @@ test('boards, lists and cards validate input, isolate data and persist across re
     const updatedCard = await updatedCardResponse.json();
     assert.equal(updatedCard.title, 'Уточнённая задача');
     assert.equal(updatedCard.position, card.position);
+    const deadline = await mutate(`${cardsPath}/${card.id}`, 'PATCH', { dueDate: '2024-02-29', completed: true });
+    assert.equal(deadline.status, 200);
+    Object.assign(updatedCard, await deadline.json());
+    assert.equal(updatedCard.dueDate, '2024-02-29');
+    assert.equal(updatedCard.completed, true);
+    const descriptionOnly = await (await mutate(`${cardsPath}/${card.id}`, 'PATCH', { description: updatedCard.description })).json();
+    assert.equal(descriptionOnly.dueDate, '2024-02-29');
+    assert.equal(descriptionOnly.completed, true);
+    const resetDeadline = await (await mutate(`${cardsPath}/${card.id}`, 'PATCH', { dueDate: null, completed: false })).json();
+    assert.equal(resetDeadline.dueDate, null);
+    assert.equal(resetDeadline.completed, false);
+    Object.assign(updatedCard, await (await mutate(`${cardsPath}/${card.id}`, 'PATCH', { dueDate: '2024-02-29', completed: true })).json());
     assert.equal((await mutate(`${cardsPath}/${secondCard.id}`, 'DELETE')).status, 200);
     assert.equal((await mutate(`${cardsPath}/${secondCard.id}`, 'DELETE')).status, 404);
-    const thirdCard = await (await send(cardsPath, { title: 'Следующая задача' })).json();
+    const thirdCard = await (await send(cardsPath, { title: 'Следующая задача', dueDate: '2099-12-31', completed: false })).json();
+    assert.equal(thirdCard.dueDate, '2099-12-31');
     assert.equal(thirdCard.description, '');
     assert.ok(thirdCard.position > updatedCard.position);
     const movePath = `${cardsPath}/${thirdCard.id}/move`;
@@ -149,6 +171,8 @@ test('boards, lists and cards validate input, isolate data and persist across re
     const targetCards = await (await send(wrongListPath)).json();
     assert.deepEqual(targetCards.map(c => [c.id, c.position]), [[targetCard.id, 0], [card.id, 1]]);
     assert.equal(targetCards[1].description, updatedCard.description);
+    assert.equal(targetCards[1].dueDate, '2024-02-29');
+    assert.equal(targetCards[1].completed, true);
     assert.equal((await mutate(`${wrongListPath}/${card.id}/move`, 'PATCH', { targetListId: firstList.id, position: 0 })).status, 200);
     assert.equal((await mutate(`${wrongListPath}/${targetCard.id}`, 'DELETE')).status, 200);
     // Keep the expected records current after ordering updates their timestamps.

@@ -19,9 +19,18 @@ export interface Card {
   listId: string;
   title: string;
   description: string;
+  dueDate: string | null;
+  completed: boolean;
   position: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CardInput {
+  title: string;
+  description: string;
+  dueDate: string | null;
+  completed: boolean;
 }
 
 export class ApiError extends Error {
