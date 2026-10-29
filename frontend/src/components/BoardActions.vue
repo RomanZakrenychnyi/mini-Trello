@@ -11,6 +11,7 @@ const error = ref('');
 const counts = ref<{ lists: number; cards: number } | null>(null);
 const input = ref<HTMLInputElement | null>(null);
 const trigger = ref<HTMLButtonElement | null>(null);
+const deleteTrigger = ref<HTMLButtonElement | null>(null);
 const confirmation = ref<HTMLHeadingElement | null>(null);
 const path = `/boards/${encodeURIComponent(props.board.id)}`;
 
@@ -24,10 +25,11 @@ async function renameMode() {
 }
 async function cancel() {
   if (busy.value) return;
+  const wasDeleting = mode.value === 'delete';
   mode.value = 'idle';
   error.value = '';
   await nextTick();
-  trigger.value?.focus();
+  (wasDeleting ? deleteTrigger.value : trigger.value)?.focus();
 }
 async function rename() {
   if (busy.value) return;
@@ -67,7 +69,7 @@ async function remove() {
   <div class="board-actions" :aria-busy="busy">
     <div v-if="mode === 'idle'" class="list-actions">
       <button ref="trigger" class="secondary" @click="renameMode">Переименовать доску</button>
-      <button class="danger-link" @click="deletionMode">Удалить доску</button>
+      <button ref="deleteTrigger" class="danger-link" @click="deletionMode">Удалить доску</button>
     </div>
     <form v-else-if="mode === 'rename'" class="board-action-panel" @submit.prevent="rename" @keydown.esc="cancel">
       <label for="rename-board">Название доски</label>

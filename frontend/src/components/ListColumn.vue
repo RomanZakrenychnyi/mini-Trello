@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, ref } from 'vue';
 import { request, type BoardList } from '../api';
 import ListCards from './ListCards.vue';
+import { createDragScroll } from '../dragScroll';
 
 const props = defineProps<{ list: BoardList; index: number; total: number; movementDisabled: boolean }>();
 const emit = defineEmits<{ updated: [list: BoardList]; removed: [id: string]; move: [position: number]; dragging: [active: boolean] }>();
@@ -11,8 +12,10 @@ let origin: { x: number; y: number; offsetX: number; offsetY: number; width: num
 let ghost: HTMLElement | null = null;
 let marker: HTMLElement | null = null;
 let dropPosition: number | null = null;
+const dragScroll = createDragScroll();
 function clearMarker() { marker?.removeAttribute('data-column-drop'); marker = null; }
 function cancelDrag() {
+  dragScroll.stop();
   origin = null;
   draggingColumn.value = false;
   ghost?.remove(); ghost = null;
@@ -47,9 +50,11 @@ function drag(event: PointerEvent) {
   ghost.style.transform = `translate3d(${event.clientX - origin.offsetX}px, ${event.clientY - origin.offsetY}px, 0)`;
   const row = column.value.closest<HTMLElement>('.lists-row');
   if (!row) return;
+  dragScroll.move(event.clientX, event.clientY, row, () => updateTarget(event, row));
+  updateTarget(event, row);
+}
+function updateTarget(event: PointerEvent, row: HTMLElement) {
   const bounds = row.getBoundingClientRect();
-  if (event.clientX > bounds.right - 32) row.scrollLeft += 20;
-  if (event.clientX < bounds.left + 32) row.scrollLeft -= 20;
   clearMarker(); dropPosition = null;
   if (event.clientY < bounds.top || event.clientY > bounds.bottom || event.clientX < bounds.left || event.clientX > bounds.right) return;
   const columns = [...row.querySelectorAll<HTMLElement>('[data-list-index]')];
@@ -76,6 +81,13 @@ const error = ref('');
 const cardCount = ref<number | null>(null);
 const input = ref<HTMLInputElement | null>(null);
 const renameButton = ref<HTMLButtonElement | null>(null);
+const deleteButton = ref<HTMLButtonElement | null>(null);
+const confirmation = ref<HTMLElement | null>(null);
+async function confirmDeletion() {
+  confirming.value = true; error.value = '';
+  await nextTick();
+  confirmation.value?.focus();
+}
 const path = `/boards/${encodeURIComponent(props.list.boardId)}/lists/${encodeURIComponent(props.list.id)}`;
 
 async function edit() {
@@ -89,11 +101,13 @@ async function edit() {
 }
 
 async function cancel() {
+  if (busy.value) return;
+  const wasDeleting = confirming.value;
   editing.value = false;
   confirming.value = false;
   error.value = '';
   await nextTick();
-  renameButton.value?.focus();
+  (wasDeleting ? deleteButton.value : renameButton.value)?.focus();
 }
 
 async function rename() {
@@ -108,6 +122,7 @@ async function rename() {
   try {
     const result = await request<BoardList>(path, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: trimmed }) });
     emit('updated', result);
+    busy.value = false;
     await cancel();
   } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Не удалось переименовать список'; }
   finally { busy.value = false; }
@@ -127,7 +142,7 @@ async function remove() {
 
 <template>
   <article ref="column" class="list-column" :class="{ 'list-drag-origin': draggingColumn }" :data-list-index="index" :aria-label="`Список ${list.name}`" :aria-busy="busy">
-    <form v-if="editing" @submit.prevent="rename">
+    <form v-if="editing" @submit.prevent="rename" @keydown.esc.stop.prevent="cancel">
       <label :for="`rename-${list.id}`">Название списка</label>
       <input :id="`rename-${list.id}`" ref="input" v-model="name" required maxlength="100" :disabled="busy" :aria-invalid="!!error" :aria-describedby="error ? `error-${list.id}` : undefined" @keydown.esc="!busy && cancel()" />
       <div class="list-actions"><button :disabled="busy">{{ busy ? 'Сохраняем…' : 'Сохранить' }}</button><button type="button" class="secondary" :disabled="busy" @click="cancel">Отмена</button></div>
@@ -141,11 +156,11 @@ async function remove() {
     </div>
     <ListCards :board-id="list.boardId" :list-id="list.id" @count="cardCount = $event" />
     <template v-if="!editing">
-      <div v-if="confirming" class="delete-confirm">
-        <p>Удалить пустой список «{{ list.name }}»?</p>
+      <div v-if="confirming" class="delete-confirm" @keydown.esc.stop.prevent="cancel">
+        <p ref="confirmation" tabindex="-1">Удалить пустой список «{{ list.name }}»?</p>
         <div class="list-actions"><button class="danger" :disabled="busy" @click="remove">{{ busy ? 'Удаляем…' : 'Да, удалить' }}</button><button class="secondary" :disabled="busy" @click="cancel">Отмена</button></div>
       </div>
-      <div v-else class="list-actions"><button ref="renameButton" class="secondary" @click="edit">Переименовать</button><button class="danger-link" :disabled="cardCount !== 0" :title="cardCount ? 'Сначала удалите карточки из списка' : undefined" @click="confirming = true; error = ''">Удалить</button></div>
+      <div v-else class="list-actions"><button ref="renameButton" class="secondary" @click="edit">Переименовать</button><button ref="deleteButton" class="danger-link" :disabled="cardCount !== 0" :title="cardCount ? 'Сначала удалите карточки из списка' : undefined" @click="confirmDeletion">Удалить</button></div>
       <p v-if="cardCount" class="list-hint">Чтобы удалить список, сначала удалите его карточки.</p>
     </template>
     <p v-if="error" :id="`error-${list.id}`" class="error" role="alert">{{ error }}</p>

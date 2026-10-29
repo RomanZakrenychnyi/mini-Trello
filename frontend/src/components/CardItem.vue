@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, ref } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, ref } from 'vue';
 import { cardMovement } from '../cardMovement';
 import { boardSearch } from '../boardSearch';
 import { request, type Card, type CardInput } from '../api';
 import CardForm from './CardForm.vue';
 import CardChecklist from './CardChecklist.vue';
+import { createDragScroll } from '../dragScroll';
 
 const props = defineProps<{ card: Card; path: string; index: number; total: number }>();
 const movement = inject(cardMovement)!;
@@ -14,6 +15,7 @@ const formattedDate = computed(() => props.card.dueDate?.split('-').reverse().jo
 let pointerStart: { x: number; y: number; offsetX: number; offsetY: number; width: number; height: number } | null = null;
 const article = ref<HTMLElement | null>(null);
 let settleTimer: ReturnType<typeof setTimeout> | undefined;
+const dragScroll = createDragScroll();
 function start(event: PointerEvent) {
   if (busy.value || checklistBusy.value || movement.moving.value || movement.searchActive.value || movement.preview.value?.settling || event.button !== 0 || !article.value) return;
   const rect = article.value.getBoundingClientRect();
@@ -31,8 +33,11 @@ function pointerMove(event: PointerEvent) {
   movement.dragged.value = props.card;
   movement.preview.value = { x: event.clientX - pointerStart.offsetX, y: event.clientY - pointerStart.offsetY, width: pointerStart.width, height: pointerStart.height, settling: false };
   movement.target.value = destination(event);
+  const row = article.value?.closest<HTMLElement>('.lists-row');
+  if (row) dragScroll.move(event.clientX, event.clientY, row, () => { movement.target.value = destination(event); });
 }
 function release(event: PointerEvent) {
+  dragScroll.stop();
   const origin = pointerStart;
   pointerStart = null;
   window.removeEventListener('keydown', escapeDrag);
@@ -58,6 +63,7 @@ function release(event: PointerEvent) {
   }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180);
 }
 function cancelDrag() {
+  dragScroll.stop();
   if (!pointerStart) return;
   pointerStart = null;
   window.removeEventListener('keydown', escapeDrag);
@@ -88,7 +94,22 @@ const checklistBusy = ref(false);
 const descriptionExpanded = ref(false);
 const descriptionExcerpt = computed(() => props.card.description.split('\n').slice(0, 3).join('\n').slice(0, 140));
 const error = ref('');
-function cancel() { editing.value = false; confirming.value = false; error.value = ''; }
+const editButton = ref<HTMLButtonElement | null>(null);
+const deleteButton = ref<HTMLButtonElement | null>(null);
+const confirmation = ref<HTMLElement | null>(null);
+async function confirmDeletion() {
+  confirming.value = true;
+  error.value = '';
+  await nextTick();
+  confirmation.value?.focus();
+}
+async function cancel() {
+  if (busy.value) return;
+  const wasDeleting = confirming.value;
+  editing.value = false; confirming.value = false; error.value = '';
+  await nextTick();
+  (wasDeleting ? deleteButton.value : editButton.value)?.focus();
+}
 async function save(data: CardInput) {
   if (busy.value || checklistBusy.value) return;
   busy.value = true;
@@ -96,7 +117,8 @@ async function save(data: CardInput) {
   try {
     const card = await request<Card>(`${props.path}/${props.card.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     emit('updated', card);
-    cancel();
+    busy.value = false;
+    await cancel();
   } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Не удалось сохранить карточку'; }
   finally { busy.value = false; }
 }
@@ -143,8 +165,8 @@ async function remove() {
         </select>
       </div>
       </details>
-      <div v-if="confirming" class="delete-confirm"><p>Удалить карточку «{{ card.title }}» и её чек-лист?</p><div class="list-actions"><button class="danger" :disabled="busy || checklistBusy" @click="remove">{{ busy ? 'Удаляем…' : 'Да, удалить карточку' }}</button><button class="secondary" :disabled="busy || checklistBusy" @click="cancel">Отмена</button></div></div>
-      <div v-else class="list-actions"><button class="secondary" :disabled="busy || checklistBusy" @click="editing = true; error = ''">Редактировать</button><button class="danger-link" :disabled="busy || checklistBusy" @click="confirming = true; error = ''">Удалить карточку</button></div>
+      <div v-if="confirming" class="delete-confirm" @keydown.esc.stop.prevent="cancel"><p ref="confirmation" tabindex="-1">Удалить карточку «{{ card.title }}» и её чек-лист?</p><div class="list-actions"><button class="danger" :disabled="busy || checklistBusy" @click="remove">{{ busy ? 'Удаляем…' : 'Да, удалить карточку' }}</button><button class="secondary" :disabled="busy || checklistBusy" @click="cancel">Отмена</button></div></div>
+      <div v-else class="list-actions"><button ref="editButton" class="secondary" :disabled="busy || checklistBusy" @click="editing = true; error = ''">Редактировать</button><button ref="deleteButton" class="danger-link" :disabled="busy || checklistBusy" @click="confirmDeletion">Удалить карточку</button></div>
     </template>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
   </article>

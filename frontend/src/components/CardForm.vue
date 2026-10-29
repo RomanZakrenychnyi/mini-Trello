@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import type { CardInput } from '../api';
 
 const props = defineProps<{ id: string; initialTitle?: string; initialDescription?: string; initialDueDate?: string | null; initialCompleted?: boolean; busy: boolean; submitLabel: string }>();
@@ -9,11 +9,17 @@ const description = ref(props.initialDescription ?? '');
 const dueDate = ref(props.initialDueDate ?? '');
 const completed = ref(props.initialCompleted ?? false);
 const error = ref('');
+const titleInput = ref<HTMLInputElement | null>(null);
+onMounted(() => {
+  titleInput.value?.focus();
+  titleInput.value?.closest('form')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+});
 function submit() {
   if (props.busy) return;
   error.value = '';
   if (!title.value.trim() || title.value.trim().length > 200) {
     error.value = 'Название должно содержать от 1 до 200 символов';
+    titleInput.value?.focus();
     return;
   }
   if (description.value.length > 5000) {
@@ -25,9 +31,9 @@ function submit() {
 </script>
 
 <template>
-  <form class="card-form" @submit.prevent="submit">
+  <form class="card-form" @submit.prevent="submit" @keydown.esc.stop.prevent="!busy && emit('cancel')">
     <label :for="`${id}-title`">Название карточки</label>
-    <input :id="`${id}-title`" v-model="title" maxlength="200" required :disabled="busy" :aria-describedby="error ? `${id}-error` : undefined" />
+    <input :id="`${id}-title`" ref="titleInput" v-model="title" maxlength="200" required :disabled="busy" :aria-invalid="!!error" :aria-describedby="error ? `${id}-error` : undefined" />
     <label :for="`${id}-description`">Описание</label>
     <textarea :id="`${id}-description`" v-model="description" maxlength="5000" rows="4" :disabled="busy" placeholder="Необязательно" />
     <label :for="`${id}-due-date`">Срок выполнения</label>

@@ -58,11 +58,18 @@ async function create() {
   });
 }
 async function update(item: ChecklistItem, data: { title?: string; completed?: boolean }) {
+  const wasEditing = editing.value === item.id;
   await mutate(async () => {
     const result = await request<ChecklistItem>(`${props.path}/checklist/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     items.value = items.value.map(entry => entry.id === item.id ? result : entry);
-    editing.value = null;
+    if (editing.value === item.id) {
+      editing.value = null;
+    }
   });
+  if (wasEditing && editing.value === null) {
+    await nextTick();
+    document.getElementById(`checklist-rename-${item.id}`)?.focus();
+  }
 }
 function toggle(item: ChecklistItem, event: Event) {
   (event.target as HTMLInputElement).checked = item.completed;
@@ -81,6 +88,17 @@ async function beginEdit(item: ChecklistItem) {
   const input = document.getElementById(`checklist-edit-${item.id}`) as HTMLInputElement | null;
   input?.focus();
   input?.select();
+}
+async function cancelItem(id: string, deleting = false) {
+  if (saving.value) return;
+  editing.value = null; confirming.value = null; error.value = '';
+  await nextTick();
+  document.getElementById(`checklist-${deleting ? 'delete' : 'rename'}-${id}`)?.focus();
+}
+async function confirmItem(item: ChecklistItem) {
+  confirming.value = item.id; error.value = '';
+  await nextTick();
+  document.getElementById(`checklist-confirm-${item.id}`)?.focus();
 }
 async function remove(item: ChecklistItem) {
   await mutate(async () => {
@@ -110,24 +128,24 @@ onBeforeUnmount(() => { generation++; emit('busy', false); });
       <fieldset class="checklist-fields" :disabled="disabled || saving">
         <ul class="checklist-items">
           <li v-for="item in items" :key="item.id" class="checklist-item">
-            <form v-if="editing === item.id" @submit.prevent="rename(item)" @keydown.esc="editing = null; error = ''">
+            <form v-if="editing === item.id" @submit.prevent="rename(item)" @keydown.esc.stop.prevent="cancelItem(item.id)">
               <label :for="`checklist-edit-${item.id}`">Название пункта</label>
               <input :id="`checklist-edit-${item.id}`" v-model="editTitle" required maxlength="200" />
-              <div class="list-actions"><button>Сохранить пункт</button><button type="button" class="secondary" @click="editing = null; error = ''">Отмена</button></div>
+              <div class="list-actions"><button>Сохранить пункт</button><button type="button" class="secondary" @click="cancelItem(item.id)">Отмена</button></div>
             </form>
             <template v-else>
               <label class="checklist-label" :class="{ 'checklist-done': item.completed }">
                 <input type="checkbox" :checked="item.completed" @change="toggle(item, $event)" />
                 <span>{{ item.title }}</span>
               </label>
-              <div v-if="confirming === item.id" class="checklist-confirm">
-                <p>Удалить пункт «{{ item.title }}»?</p>
+              <div v-if="confirming === item.id" class="checklist-confirm" @keydown.esc.stop.prevent="cancelItem(item.id, true)">
+                <p :id="`checklist-confirm-${item.id}`" tabindex="-1">Удалить пункт «{{ item.title }}»?</p>
                 <button class="danger" @click="remove(item)">Да, удалить пункт</button>
-                <button class="secondary" @click="confirming = null; error = ''">Отмена</button>
+                <button class="secondary" @click="cancelItem(item.id, true)">Отмена</button>
               </div>
               <div v-else class="checklist-actions">
-                <button class="secondary" :aria-label="`Переименовать пункт ${item.title}`" @click="beginEdit(item)">Изменить</button>
-                <button class="danger-link" :aria-label="`Удалить пункт ${item.title}`" @click="confirming = item.id; error = ''">Удалить</button>
+                <button :id="`checklist-rename-${item.id}`" class="secondary" :aria-label="`Переименовать пункт ${item.title}`" @click="beginEdit(item)">Изменить</button>
+                <button :id="`checklist-delete-${item.id}`" class="danger-link" :aria-label="`Удалить пункт ${item.title}`" @click="confirmItem(item)">Удалить</button>
               </div>
             </template>
           </li>

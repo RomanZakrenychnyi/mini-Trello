@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, watch, watchEffect, onBeforeUnmount } from 'vue';
+import { computed, inject, nextTick, onMounted, ref, watch, watchEffect, onBeforeUnmount } from 'vue';
 import { boardSearch } from '../boardSearch';
 import { cardMovement } from '../cardMovement';
 import { request, type Card, type CardInput } from '../api';
@@ -15,6 +15,14 @@ const loadError = ref('');
 const createError = ref('');
 const adding = ref(false);
 const busy = ref(false);
+const addButton = ref<HTMLButtonElement | null>(null);
+async function closeForm() {
+  if (busy.value) return;
+  adding.value = false;
+  createError.value = '';
+  await nextTick();
+  addButton.value?.focus();
+}
 const movement = inject(cardMovement)!;
 const search = inject(boardSearch)!;
 const needle = computed(() => search.query.value.trim().toLocaleLowerCase());
@@ -49,7 +57,8 @@ async function create(data: CardInput) {
     cards.value.push(card);
     cards.value.sort((a, b) => a.position - b.position);
     emit('count', cards.value.length);
-    adding.value = false;
+    busy.value = false;
+    await closeForm();
   } catch (cause) { createError.value = cause instanceof Error ? cause.message : 'Не удалось создать карточку'; }
   finally { busy.value = false; }
 }
@@ -72,8 +81,8 @@ onMounted(load);
       </div>
       </TransitionGroup>
       <div v-if="movement.dragged.value" class="card-drop" :class="{ 'drop-active': active(cards.length) }" :data-drop-list="listId" :data-drop-index="cards.length">Поместить в конец</div>
-      <CardForm v-if="adding" :id="`new-${listId}`" :busy="busy" submit-label="Создать карточку" @save="create" @cancel="adding = false; createError = ''" />
-      <button v-else class="add-card secondary" @click="adding = true; createError = ''">+ Добавить карточку</button>
+      <CardForm v-if="adding" :id="`new-${listId}`" :busy="busy" submit-label="Создать карточку" @save="create" @cancel="closeForm" />
+      <button v-else ref="addButton" class="add-card secondary" @click="adding = true; createError = ''">+ Добавить карточку</button>
       <p v-if="createError" role="alert" class="error">{{ createError }}</p>
     </template>
   </div>
