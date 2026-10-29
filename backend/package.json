@@ -3,18 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "nest start --watch",
-    "build": "nest build",
+    "dev": "npm run build && concurrently -k -n compiler,server \"tsc --watch --preserveWatchOutput\" \"node --watch dist/main.js\"",
+    "build": "node scripts/build.cjs",
     "typecheck": "tsc --noEmit",
     "start": "node dist/main.js",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "prebuild": "prisma generate",
-    "predev": "prisma generate",
     "test": "npm run build && node --test test/*.e2e.cjs",
     "predb:migrate": "node scripts/prepare-db.cjs",
-    "build:hosting": "prisma generate --schema prisma/postgres/schema.prisma && nest build",
+    "build:hosting": "prisma generate --schema prisma/postgres/schema.prisma && node scripts/build.cjs",
     "start:hosting": "prisma migrate deploy --schema prisma/postgres/schema.prisma && node dist/main.js"
   },
   "dependencies": {
@@ -26,7 +25,6 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.0",
     "@types/express": "^5.0.6",
     "@types/node": "^24.0.0",
     "prisma": "^6.19.3",
