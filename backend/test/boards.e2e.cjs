@@ -105,6 +105,46 @@ test('boards, lists and cards validate input, isolate data and persist across re
     assert.equal(card.listId, firstList.id);
     assert.equal(card.dueDate, null);
     assert.equal(card.completed, false);
+    const checklistPath = `${cardsPath}/${card.id}/checklist`;
+    assert.deepEqual(await (await send(checklistPath)).json(), []);
+    assert.equal((await send(`${cardsPath}/missing/checklist`)).status, 404);
+    for (const invalid of [{}, { title: '' }, { title: ' ' }, { title: null }, { title: 7 }, { title: 'a'.repeat(201) }, { title: 'Пункт', completed: 'true' }]) {
+      assert.equal((await send(checklistPath, invalid)).status, 400);
+    }
+    const firstItemResponse = await send(checklistPath, { title: '  Первый шаг  ' });
+    assert.equal(firstItemResponse.status, 201);
+    const firstItem = await firstItemResponse.json();
+    assert.equal(firstItem.title, 'Первый шаг');
+    assert.equal(firstItem.completed, false);
+    assert.equal(firstItem.cardId, card.id);
+    assert.equal(firstItem.position, 0);
+    const secondItem = await (await send(checklistPath, { title: 'Второй шаг' })).json();
+    assert.equal(secondItem.position, 1);
+    for (const foreignPath of [`${wrongListPath}/${card.id}/checklist`, `${wrongBoardPath}/${card.id}/checklist`, `${cardsPath}/missing/checklist`]) {
+      assert.equal((await send(foreignPath)).status, 404);
+      assert.equal((await send(foreignPath, { title: 'Чужой пункт' })).status, 404);
+      assert.equal((await mutate(`${foreignPath}/${firstItem.id}`, 'PATCH', { completed: true })).status, 404);
+      assert.equal((await mutate(`${foreignPath}/${firstItem.id}`, 'DELETE')).status, 404);
+    }
+    for (const invalid of [{}, { title: ' ' }, { title: 'a'.repeat(201) }, { completed: null }, { completed: 1 }]) {
+      assert.equal((await mutate(`${checklistPath}/${firstItem.id}`, 'PATCH', invalid)).status, 400);
+    }
+    const renamedItem = await mutate(`${checklistPath}/${firstItem.id}`, 'PATCH', { title: '  Проверить результат  ', completed: true });
+    assert.equal(renamedItem.status, 200);
+    Object.assign(firstItem, await renamedItem.json());
+    assert.equal(firstItem.title, 'Проверить результат');
+    assert.equal(firstItem.completed, true);
+    Object.assign(firstItem, await (await mutate(`${checklistPath}/${firstItem.id}`, 'PATCH', { completed: false })).json());
+    assert.equal(firstItem.title, 'Проверить результат');
+    assert.equal(firstItem.completed, false);
+    Object.assign(firstItem, await (await mutate(`${checklistPath}/${firstItem.id}`, 'PATCH', { completed: true })).json());
+    assert.equal((await mutate(`${checklistPath}/${secondItem.id}`, 'DELETE')).status, 200);
+    assert.equal((await mutate(`${checklistPath}/${secondItem.id}`, 'DELETE')).status, 404);
+    const lastItem = await (await send(checklistPath, { title: 'a'.repeat(200), completed: true })).json();
+    assert.equal(lastItem.title.length, 200);
+    assert.ok(lastItem.position > firstItem.position);
+    assert.deepEqual(await (await send(checklistPath)).json(), [firstItem, lastItem]);
+    assert.equal((await (await send(cardsPath)).json()).find(item => item.id === card.id).completed, false);
     for (const invalid of [
       { dueDate: '' }, { dueDate: '2026-02-29' }, { dueDate: '2026-04-31' }, { dueDate: '0000-01-01' },
       { dueDate: '2026-10-28T12:00:00Z' }, { dueDate: 123 }, { completed: 'true' }, { completed: null },
@@ -115,6 +155,10 @@ test('boards, lists and cards validate input, isolate data and persist across re
     const secondCardResponse = await send(cardsPath, { title: 'a'.repeat(200), description: 'a'.repeat(5000) });
     assert.equal(secondCardResponse.status, 201);
     const secondCard = await secondCardResponse.json();
+    const secondChecklist = `${cardsPath}/${secondCard.id}/checklist`;
+    const disposableItem = await (await send(secondChecklist, { title: 'Удаляется с карточкой' })).json();
+    assert.equal((await mutate(`${secondChecklist}/${firstItem.id}`, 'PATCH', { completed: false })).status, 404);
+    assert.equal((await mutate(`${secondChecklist}/${firstItem.id}`, 'DELETE')).status, 404);
     assert.equal(secondCard.position, 1);
     assert.equal((await mutate(`${listPath}/${firstList.id}`, 'DELETE')).status, 409);
     assert.deepEqual(await (await send(wrongListPath)).json(), []);
@@ -146,6 +190,7 @@ test('boards, lists and cards validate input, isolate data and persist across re
     assert.equal(resetDeadline.completed, false);
     Object.assign(updatedCard, await (await mutate(`${cardsPath}/${card.id}`, 'PATCH', { dueDate: '2024-02-29', completed: true })).json());
     assert.equal((await mutate(`${cardsPath}/${secondCard.id}`, 'DELETE')).status, 200);
+    assert.equal(await prisma.checklistItem.count({ where: { id: disposableItem.id } }), 0);
     assert.equal((await mutate(`${cardsPath}/${secondCard.id}`, 'DELETE')).status, 404);
     const thirdCard = await (await send(cardsPath, { title: 'Следующая задача', dueDate: '2099-12-31', completed: false })).json();
     assert.equal(thirdCard.dueDate, '2099-12-31');
@@ -173,6 +218,10 @@ test('boards, lists and cards validate input, isolate data and persist across re
     assert.equal(targetCards[1].description, updatedCard.description);
     assert.equal(targetCards[1].dueDate, '2024-02-29');
     assert.equal(targetCards[1].completed, true);
+    const movedChecklist = `${wrongListPath}/${card.id}/checklist`;
+    assert.deepEqual(await (await send(movedChecklist)).json(), [firstItem, lastItem]);
+    assert.equal((await send(checklistPath)).status, 404);
+    assert.equal((await mutate(`${checklistPath}/${firstItem.id}`, 'PATCH', { completed: false })).status, 404);
     assert.equal((await mutate(`${wrongListPath}/${card.id}/move`, 'PATCH', { targetListId: firstList.id, position: 0 })).status, 200);
     assert.equal((await mutate(`${wrongListPath}/${targetCard.id}`, 'DELETE')).status, 200);
     // Keep the expected records current after ordering updates their timestamps.
@@ -182,6 +231,7 @@ test('boards, lists and cards validate input, isolate data and persist across re
     await app.close();
     app = undefined;
     base = await start();
+    assert.deepEqual(await (await send(checklistPath)).json(), [firstItem, lastItem]);
     assert.deepEqual(await (await send(`/boards/${board.id}`)).json(), board);
     const boards = await (await send('/boards')).json();
     assert.equal(boards.length, 2);
@@ -217,7 +267,8 @@ test('boards, lists and cards validate input, isolate data and persist across re
     for (const name of ['Первая', 'Вторая']) {
       const list = await (await send(`/boards/${doomed.id}/lists`, { name })).json();
       doomedLists.push(list.id);
-      await send(`/boards/${doomed.id}/lists/${list.id}/cards`, { title: 'Вложенная карточка' });
+      const doomedCard = await (await send(`/boards/${doomed.id}/lists/${list.id}/cards`, { title: 'Вложенная карточка' })).json();
+      await send(`/boards/${doomed.id}/lists/${list.id}/cards/${doomedCard.id}/checklist`, { title: 'Вложенный пункт' });
     }
     assert.deepEqual(await (await send(`/boards/${doomed.id}/deletion-preview`)).json(), { lists: 2, cards: 2 });
     const deleteBoard = await mutate(`/boards/${doomed.id}`, 'DELETE');
@@ -227,6 +278,7 @@ test('boards, lists and cards validate input, isolate data and persist across re
     assert.equal((await send(`/boards/${doomed.id}`)).status, 404);
     assert.equal(await prisma.boardList.count({ where: { boardId: doomed.id } }), 0);
     assert.equal(await prisma.card.count({ where: { listId: { in: doomedLists } } }), 0);
+    assert.equal(await prisma.checklistItem.count(), 2);
     assert.deepEqual(await (await send(cardsPath)).json(), [updatedCard, thirdCard]);
     assert.deepEqual(await (await send(`/boards/${otherBoard.id}`)).json(), otherBoard);
     const listMovePath = `${listPath}/${thirdList.id}/move`;
@@ -258,6 +310,7 @@ test('boards, lists and cards validate input, isolate data and persist across re
     assert.equal((await send(`/api/boards/${doomed.id}`)).status, 404);
     assert.deepEqual(await (await send(`/api${listPath}`)).json(), [thirdList, renamed]);
     assert.deepEqual(await (await send(`/api${cardsPath}`)).json(), [updatedCard, thirdCard]);
+    assert.deepEqual(await (await send(`/api${checklistPath}`)).json(), [firstItem, lastItem]);
     assert.equal((await send('/api/missing')).status, 404);
     for (const path of ['/', `/boards/${board.id}`]) {
       const html = await send(path);

@@ -33,6 +33,16 @@ export interface CardInput {
   completed: boolean;
 }
 
+export interface ChecklistItem {
+  id: string;
+  cardId: string;
+  title: string;
+  completed: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number) { super(message); }
 }

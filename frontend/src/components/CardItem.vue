@@ -4,6 +4,7 @@ import { cardMovement } from '../cardMovement';
 import { boardSearch } from '../boardSearch';
 import { request, type Card, type CardInput } from '../api';
 import CardForm from './CardForm.vue';
+import CardChecklist from './CardChecklist.vue';
 
 const props = defineProps<{ card: Card; path: string; index: number; total: number }>();
 const movement = inject(cardMovement)!;
@@ -14,7 +15,7 @@ let pointerStart: { x: number; y: number; offsetX: number; offsetY: number; widt
 const article = ref<HTMLElement | null>(null);
 let settleTimer: ReturnType<typeof setTimeout> | undefined;
 function start(event: PointerEvent) {
-  if (busy.value || movement.moving.value || movement.searchActive.value || movement.preview.value?.settling || event.button !== 0 || !article.value) return;
+  if (busy.value || checklistBusy.value || movement.moving.value || movement.searchActive.value || movement.preview.value?.settling || event.button !== 0 || !article.value) return;
   const rect = article.value.getBoundingClientRect();
   pointerStart = { x: event.clientX, y: event.clientY, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top, width: rect.width, height: rect.height };
   window.addEventListener('keydown', escapeDrag);
@@ -83,10 +84,11 @@ const emit = defineEmits<{ updated: [card: Card]; removed: [id: string] }>();
 const editing = ref(false);
 const confirming = ref(false);
 const busy = ref(false);
+const checklistBusy = ref(false);
 const error = ref('');
 function cancel() { editing.value = false; confirming.value = false; error.value = ''; }
 async function save(data: CardInput) {
-  if (busy.value) return;
+  if (busy.value || checklistBusy.value) return;
   busy.value = true;
   error.value = '';
   try {
@@ -97,7 +99,7 @@ async function save(data: CardInput) {
   finally { busy.value = false; }
 }
 async function toggleCompleted() {
-  if (busy.value) return;
+  if (busy.value || checklistBusy.value) return;
   busy.value = true;
   error.value = '';
   try {
@@ -106,7 +108,7 @@ async function toggleCompleted() {
   finally { busy.value = false; }
 }
 async function remove() {
-  if (busy.value) return;
+  if (busy.value || checklistBusy.value) return;
   busy.value = true;
   error.value = '';
   try {
@@ -124,18 +126,19 @@ async function remove() {
       <span v-if="!movement.searchActive.value" class="drag-handle secondary" role="img" :aria-label="`Перетащить карточку ${card.title}`" title="Перетащить карточку" @pointerdown.prevent="start" @pointermove="pointerMove" @pointerup="release" @pointercancel="cancelDrag" @lostpointercapture="cancelDrag">⠿</span>
       <h4>{{ card.title }}</h4>
       <p v-if="card.dueDate" class="card-deadline" :class="{ 'deadline-overdue': overdue }"><time :datetime="card.dueDate">Срок: {{ formattedDate }}</time><span v-if="overdue"> · Просрочено</span></p>
-      <button class="completion-button secondary" :aria-pressed="card.completed" :disabled="busy || movement.moving.value" @click="toggleCompleted">{{ card.completed ? '✓ Выполнено' : 'Отметить выполненной' }}</button>
+      <button class="completion-button secondary" :aria-pressed="card.completed" :disabled="busy || checklistBusy || movement.moving.value" @click="toggleCompleted">{{ card.completed ? '✓ Выполнено' : 'Отметить выполненной' }}</button>
       <p v-if="card.description" class="card-description">{{ card.description }}</p>
+      <CardChecklist :card-id="card.id" :path="`${path}/${card.id}`" :disabled="busy || checklistBusy || movement.moving.value" @busy="checklistBusy = $event" />
       <div v-if="!confirming" class="card-movement">
-        <button class="secondary" :disabled="busy || movement.moving.value || movement.searchActive.value || index === 0" aria-label="Переместить карточку выше" @click="movement.move(card, card.listId, index - 1)">↑</button>
-        <button class="secondary" :disabled="busy || movement.moving.value || movement.searchActive.value || index === total - 1" aria-label="Переместить карточку ниже" @click="movement.move(card, card.listId, index + 1)">↓</button>
-        <select aria-label="Переместить в начало другого списка" :disabled="busy || movement.moving.value || movement.searchActive.value" @change="transfer">
+        <button class="secondary" :disabled="busy || checklistBusy || movement.moving.value || movement.searchActive.value || index === 0" aria-label="Переместить карточку выше" @click="movement.move(card, card.listId, index - 1)">↑</button>
+        <button class="secondary" :disabled="busy || checklistBusy || movement.moving.value || movement.searchActive.value || index === total - 1" aria-label="Переместить карточку ниже" @click="movement.move(card, card.listId, index + 1)">↓</button>
+        <select aria-label="Переместить в начало другого списка" :disabled="busy || checklistBusy || movement.moving.value || movement.searchActive.value" @change="transfer">
           <option value="">В другой список…</option>
           <option v-for="list in movement.lists.value.filter(item => item.id !== card.listId)" :key="list.id" :value="list.id">{{ list.name }}</option>
         </select>
       </div>
-      <div v-if="confirming"><p>Удалить карточку «{{ card.title }}»?</p><div class="list-actions"><button class="danger" :disabled="busy" @click="remove">{{ busy ? 'Удаляем…' : 'Да, удалить карточку' }}</button><button class="secondary" :disabled="busy" @click="cancel">Отмена</button></div></div>
-      <div v-else class="list-actions"><button class="secondary" @click="editing = true; error = ''">Редактировать</button><button class="danger-link" @click="confirming = true; error = ''">Удалить карточку</button></div>
+      <div v-if="confirming"><p>Удалить карточку «{{ card.title }}» и её чек-лист?</p><div class="list-actions"><button class="danger" :disabled="busy || checklistBusy" @click="remove">{{ busy ? 'Удаляем…' : 'Да, удалить карточку' }}</button><button class="secondary" :disabled="busy || checklistBusy" @click="cancel">Отмена</button></div></div>
+      <div v-else class="list-actions"><button class="secondary" :disabled="busy || checklistBusy" @click="editing = true; error = ''">Редактировать</button><button class="danger-link" :disabled="busy || checklistBusy" @click="confirming = true; error = ''">Удалить карточку</button></div>
     </template>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
   </article>

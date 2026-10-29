@@ -78,7 +78,7 @@ async function remove() {
       <h2 ref="confirmation" tabindex="-1">Удалить доску «{{ board.name }}»?</h2>
       <p v-if="busy && !counts" role="status">Проверяем содержимое…</p>
       <p v-if="counts">Списков: {{ counts.lists }}. Карточек: {{ counts.cards }}.</p>
-      <p>Доска и все её списки и карточки будут удалены без возможности восстановления.</p>
+      <p>Доска и все её списки, карточки и чек-листы будут удалены без возможности восстановления.</p>
       <div class="list-actions">
         <button class="danger" :disabled="busy || !counts" @click="remove">{{ busy && counts ? 'Удаляем…' : 'Удалить доску навсегда' }}</button>
         <button v-if="!counts && !busy" class="secondary" @click="deletionMode">Повторить проверку</button>

@@ -39,6 +39,20 @@ model Card {
   position    Int
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  checklist   ChecklistItem[]
 
   @@unique([listId, position])
+}
+
+model ChecklistItem {
+  id        String   @id @default(uuid())
+  cardId    String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  title     String
+  completed Boolean  @default(false)
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cardId, position])
 }
