@@ -49,11 +49,18 @@ export class ApiError extends Error {
 
 export async function request<T>(path: string, options?: RequestInit): Promise<T> {
   let response: Response;
-  try { response = await fetch(`/api${path}`, { ...options, signal: AbortSignal.timeout(10000) }); }
-  catch { throw new Error('Не удалось связаться с сервером. Проверьте соединение и повторите попытку.'); }
+  const reading = !options?.method || options.method.toUpperCase() === 'GET';
+  // Render Free can take about a minute to wake up. Never retry writes automatically.
+  try { response = await fetch(`/api${path}`, { ...options, signal: AbortSignal.timeout(reading ? 90000 : 30000) }); }
+  catch {
+    throw new Error(reading
+      ? 'Не удалось связаться с сервером. Проверьте соединение и повторите загрузку.'
+      : 'Не удалось получить ответ сервера. Изменение могло сохраниться: проверьте результат после обновления страницы перед повторной отправкой.');
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new ApiError(typeof body?.message === 'string' ? body.message : 'Не удалось выполнить запрос', response.status);
   }
-  return response.json() as Promise<T>;
+  try { return await response.json() as T; }
+  catch { throw new Error('Сервер вернул некорректный ответ. Обновите страницу и проверьте результат.'); }
 }

@@ -15,11 +15,14 @@
     "typecheck": "npm run typecheck --workspaces",
     "start": "npm run start -w backend",
     "db:setup": "npm run prisma:generate -w backend && npm run db:migrate -w backend",
-    "test": "npm run build -w frontend && npm test -w backend",
+    "test": "npm test -w frontend && npm run build -w frontend && npm test -w backend",
     "build:hosting": "npm run build -w frontend && npm run build:hosting -w backend",
     "start:hosting": "npm run start:hosting -w backend"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
+  },
+  "overrides": {
+    "multer": "2.5.0"
   }
 }
